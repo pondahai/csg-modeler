@@ -701,34 +701,39 @@ function dropJob(j){
   if(j.built)for(const b of j.built)b.geo.dispose();
   j.built=null;
 }
+/* 取得一個最上層物件的幾何體（呼叫端拿到的是自己的一份，用完可以 dispose）。
+   重算和匯出共用同一條路，所以匯出得到的就是畫面上那個東西，
+   而且沒被動過的直接沿用快取，不必重算。 */
+function* geoForRootG(n){
+  const key=geoKey(n), M=matrixOf(n), c=geoCache.get(n.id);
+  if(c&&c.key===key){
+    // 形狀沒變，只是換了位置／角度／大小：套一次差值矩陣就好
+    const geo=c.geo.clone();
+    if(!sameMat(c.mat,M)){
+      geo.applyMatrix4(new THREE.Matrix4().multiplyMatrices(
+        M,new THREE.Matrix4().copy(c.mat).invert()));
+    }
+    return geo;
+  }
+  let geo,ok=true;
+  try{ geo=polysToGeo(yield* evalNodeG(n)); }
+  catch(e){ console.warn(e); geo=new THREE.BufferGeometry(); buildFail++; ok=false; }
+  if(ok){                       // 算失敗的不要進快取，否則永遠不會再試一次
+    if(c)c.geo.dispose();
+    geoCache.set(n.id,{key,mat:M.clone(),geo:geo.clone()});
+  }else if(c){
+    c.geo.dispose();geoCache.delete(n.id);
+  }
+  return geo;
+}
 function* rebuildG(my){
   buildFail=0;
   const built=[];
   my.built=built;
   for(let i=0;i<roots.length;i++){
     const n=roots[i];
-    my.stage=roots.length>1?`${i+1}/${roots.length}`:'';
-    const key=geoKey(n), M=matrixOf(n), c=geoCache.get(n.id);
-    let geo;
-    if(c&&c.key===key){
-      // 形狀沒變，只是換了位置／角度／大小：套一次差值矩陣就好
-      geo=c.geo.clone();
-      if(!sameMat(c.mat,M)){
-        geo.applyMatrix4(new THREE.Matrix4().multiplyMatrices(
-          M,new THREE.Matrix4().copy(c.mat).invert()));
-      }
-    }else{
-      let ok=true;
-      try{ geo=polysToGeo(yield* evalNodeG(n)); }
-      catch(e){ console.warn(e); geo=new THREE.BufferGeometry(); buildFail++; ok=false; }
-      if(ok){                       // 算失敗的不要進快取，否則永遠不會再試一次
-        if(c)c.geo.dispose();
-        geoCache.set(n.id,{key,mat:M.clone(),geo:geo.clone()});
-      }else if(c){
-        c.geo.dispose();geoCache.delete(n.id);
-      }
-    }
-    built.push({n,geo});
+    my.stage=roots.length>1?`計算中 ${i+1}/${roots.length}`:'計算中';
+    built.push({n,geo:yield* geoForRootG(n)});
     yield;
   }
   // 已經不在場上的就別佔記憶體了
@@ -1645,88 +1650,86 @@ document.getElementById('fileStl').onchange=e=>{
 };
 
 /* ---- 匯出 ----
-   匯出範圍＝有選東西就只匯出選的（可多選），沒選就是全部。
-   範圍內的實體相加、範圍內的孔洞相減——所以想讓某個孔洞生效，
-   要把那個孔洞一起選起來。這樣「選什麼就出什麼」是可預期的。
+   **不會自動幫你做組合。** 沒有組合起來的東西就是各自獨立的：
+   最上層的實體各出各的，最上層的孔洞不會自動去挖別人——想讓孔洞生效，
+   就先把它跟實體組合起來（組合裡面的加減本來就會算，那是你明確指定的）。
+   這樣「畫面上長什麼樣，匯出就是什麼樣」，不會有沒要求的運算偷偷發生。
 
-   匯出也走分段：跟重算共用 startJob，畫面不會凍住、可以取消，
-   大模型也不會再跳「網頁無回應」。 */
+   匯出範圍＝有選東西就只匯出選的（可多選），沒選就是全部。
+   最上層的孔洞不是實體，不會被匯出。
+
+   幾何體走 geoForRootG，跟畫面同一條路，所以沒被動過的直接沿用快取，
+   匯出幾乎不用重算。整個流程跟重算共用 startJob 分段跑，畫面不會凍住、
+   可以取消；寫檔的迴圈每 WRITE_CHUNK 個面也要 yield 一次，
+   不然幾十萬面光是寫檔就會卡住。 */
+const WRITE_CHUNK=40000;
 function exportRoots(){
   const sel=roots.filter(n=>selected.includes(n.id));
-  return sel.length?sel:roots;
+  return (sel.length?sel:roots).filter(n=>n.role==='solid');
 }
 function exportScopeLabel(){
   const sel=roots.filter(n=>selected.includes(n.id));
   return sel.length?`選取的 ${sel.length} 個`:'全部';
 }
-function* exportPolysG(my,label){
+function* exportGeosG(my,label){
   const list=exportRoots();
-  const solids=list.filter(n=>n.role==='solid');
-  const holes=list.filter(n=>n.role==='hole');
-  let acc=null;
-  for(let i=0;i<solids.length;i++){
-    my.stage=`${label}：實體 ${i+1}/${solids.length}`;
-    const p=yield* evalNodeG(solids[i]);
-    acc=acc?yield* csgG(acc,p,'union'):p;
+  const out=[];
+  for(let i=0;i<list.length;i++){
+    my.stage=`${label}：${i+1}/${list.length}`;
+    const geo=yield* geoForRootG(list[i]);
+    const p=geo.getAttribute('position');
+    if(p&&p.count)out.push({n:list[i],geo});
+    else geo.dispose();
+    yield;
   }
-  for(let i=0;i<holes.length&&acc&&acc.length;i++){
-    my.stage=`${label}：孔洞 ${i+1}/${holes.length}`;
-    acc=yield* csgG(acc,yield* evalNodeG(holes[i]),'subtract');
-  }
-  return acc||[];
+  return out;
 }
-const WRITE_CHUNK=40000;     // 寫檔的迴圈也要喘口氣，不然幾十萬面一樣會卡住
 
-/* ---- 匯出 STL（二進位） ---- */
+/* ---- 匯出 STL（二進位） ----
+   多個獨立物件就直接把三角形接在一起寫進同一個檔案，不做布林聯集。
+   切片軟體本來就會自己處理重疊的殼，這裡不替使用者決定要不要合併。 */
 function* stlG(my){
-  const acc=yield* exportPolysG(my,'匯出 STL');
-  if(!acc.length)return null;
+  const parts=yield* exportGeosG(my,'匯出 STL');
+  if(!parts.length)return null;
   my.stage='匯出 STL：寫檔';
-  const g=polysToGeo(acc),pos=g.attributes.position,nor=g.attributes.normal;
-  const tri=pos.count/3;
+  let tri=0;
+  for(const {geo} of parts)tri+=geo.getAttribute('position').count/3;
   const buf=new ArrayBuffer(84+tri*50),dv=new DataView(buf);
   dv.setUint32(80,tri,true);
   let o=84;
-  for(let i=0;i<pos.count;i+=3){
-    if(i%WRITE_CHUNK===0)yield;
-    dv.setFloat32(o,nor.getX(i),true);dv.setFloat32(o+4,nor.getY(i),true);dv.setFloat32(o+8,nor.getZ(i),true);o+=12;
-    for(let k=0;k<3;k++){
-      // 匯出時轉成 Z 軸朝上，符合 3D 列印慣例
-      dv.setFloat32(o,pos.getX(i+k),true);
-      dv.setFloat32(o+4,-pos.getZ(i+k),true);
-      dv.setFloat32(o+8,pos.getY(i+k),true);o+=12;
+  for(const {geo} of parts){
+    const pos=geo.attributes.position,nor=geo.attributes.normal;
+    for(let i=0;i<pos.count;i+=3){
+      if(i%WRITE_CHUNK===0)yield;
+      dv.setFloat32(o,nor.getX(i),true);dv.setFloat32(o+4,nor.getY(i),true);dv.setFloat32(o+8,nor.getZ(i),true);o+=12;
+      for(let k=0;k<3;k++){
+        // 匯出時轉成 Z 軸朝上，符合 3D 列印慣例
+        dv.setFloat32(o,pos.getX(i+k),true);
+        dv.setFloat32(o+4,-pos.getZ(i+k),true);
+        dv.setFloat32(o+8,pos.getY(i+k),true);o+=12;
+      }
+      dv.setUint16(o,0,true);o+=2;
     }
-    dv.setUint16(o,0,true);o+=2;
+    geo.dispose();
   }
-  g.dispose();
   return new Blob([buf],{type:'application/octet-stream'});
 }
 document.getElementById('btnStl').onclick=()=>{
   startJob(my=>stlG(my),`匯出 STL（${exportScopeLabel()}）`,blob=>{
-    if(!blob){alert('沒有可以匯出的實體。');return;}
+    if(!blob){alert('沒有可以匯出的實體。\n（最上層的孔洞不會被匯出，要先跟實體組合起來。）');return;}
     download('model.stl',blob);
   });
 };
 
 /* ---- 匯出 OBJ：保留物件分組，跨軟體用 ---- */
 function* objG(my){
+  const parts=yield* exportGeosG(my,'匯出 OBJ');
+  if(!parts.length)return null;
+  my.stage='匯出 OBJ：寫檔';
   const lines=['# 加減法建模器匯出','# 單位：mm'];
-  const list=exportRoots();
-  const solids=list.filter(n=>n.role==='solid');
-  const holes=list.filter(n=>n.role==='hole');
   let base=1,count=0;
-  for(let si=0;si<solids.length;si++){
-    const n=solids[si];
-    my.stage=`匯出 OBJ：${si+1}/${solids.length}`;
-    let polys;
-    try{ polys=yield* evalNodeG(n); }catch(err){ console.warn(err); continue; }
-    // 同一層的孔洞在 evalNode 裡已處理，這裡再減掉最上層的孔洞
-    for(const h of holes){
-      if(!polys.length)break;
-      polys=yield* csgG(polys,yield* evalNodeG(h),'subtract');
-    }
-    if(!polys.length)continue;
-    const g=polysToGeo(polys),p=g.attributes.position,nr=g.attributes.normal;
+  for(const {n,geo} of parts){
+    const p=geo.attributes.position,nr=geo.attributes.normal;
     lines.push(`o ${n.name||nodeLabel(n)+'_'+n.id}`);
     for(let i=0;i<p.count;i++){
       if(i%WRITE_CHUNK===0)yield;
@@ -1742,16 +1745,14 @@ function* objG(my){
       lines.push(`f ${a}//${k} ${b}//${k} ${c}//${k}`);
     }
     base+=p.count;count+=p.count/3;
-    g.dispose();
+    geo.dispose();
   }
-  if(base===1)return null;
-  my.stage='匯出 OBJ：寫檔';
   yield;
   return new Blob([lines.join('\n')+'\n'],{type:'text/plain'});
 }
 document.getElementById('btnObj').onclick=()=>{
   startJob(my=>objG(my),`匯出 OBJ（${exportScopeLabel()}）`,blob=>{
-    if(!blob){alert('沒有可以匯出的實體。');return;}
+    if(!blob){alert('沒有可以匯出的實體。\n（最上層的孔洞不會被匯出，要先跟實體組合起來。）');return;}
     download('model.obj',blob);
   });
 };
