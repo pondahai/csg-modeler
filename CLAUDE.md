@@ -85,6 +85,24 @@
 pos/rot/size/post，不再連幾十萬個三角形一起複製。新增拖曳類操作時要沿用：
 **先判斷真的有變化，再 `beginEdit()`。**
 
+**重算是「切成一小段」跑的，不是一口氣算完。** `Bsp.buildG/clipPolygonsG/
+clipToG`、`csgG`、`evalNodeG` 都是 generator，每處理 `YIELD_EVERY`（6000）個
+多邊形就 yield 一次；`rebuild()` 每次只跑 `SLICE`（25ms）就把主執行緒還給
+瀏覽器，所以算很久時畫面還會動、可以按取消，也不會再跳「網頁無回應」。
+還控制權用 `MessageChannel`（`soon()`），不要換成 `setTimeout(0)`——後者被
+瀏覽器強制最少等 4ms，大模型會被拖慢一大截。
+
+**Web Worker 不能用。** file:// 下瀏覽器會擋掉，而這個工具必須能從隨身碟
+雙擊直接開。切段是唯一可行的解，不要再提議搬到背景執行緒。
+
+同步版 `build/clipPolygons/clipTo/csg/evalNode` 都還在，只是改成把 generator
+一口氣跑完（`drain()`），匯出 STL／OBJ 還是走同步版。實測輸出與同步版逐點
+相同，整體成本 0～10%（8100 面：同步 2538ms、切段 2532ms）。
+
+新幾何體先收在 `built` 裡，全部算完才一次換上場景——中途取消或被下一次重算
+取代時，畫面維持上一版完整結果，不會看到半成品；取消時記得 `dropJob()` 把
+已經算好的幾何體 dispose 掉，否則會漏記憶體。
+
 **拖曳時不重算 CSG。** 移動、縮放、旋轉的過程中只調整 mesh 的 transform 做預覽，放開滑鼠才呼叫 `rebuild()` 重算布林運算。因為 BSP 運算成本高，每格都算會頓。新增拖曳類操作時請沿用這個模式（參考 `liveMove()`、`liveScale()`）。
 
 **縮放分兩條路，看物件轉得正不正。** `size` 是物件自己的長寬高（旋轉之前），
