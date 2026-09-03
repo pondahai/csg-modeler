@@ -693,6 +693,17 @@ function hideDim(){if(dimEl)dimEl.style.display='none';}
    ============================================================ */
 const ray=new THREE.Raycaster(),ptr=new THREE.Vector2();
 let mode=null,start=null,startState=null;
+/* 「按下去」不等於「改了東西」。只點一下選取的話什麼都沒變，
+   不可以留下一步歷史，更不可以在放開時重算 CSG——大模型一次要幾十秒。
+   所以 pushUndo 延後到真的動到參數的那一刻才做，dragEdited 也才會變真。 */
+let dragEdited=false;
+function beginEdit(){if(!dragEdited){pushUndo();dragEdited=true;}}
+/* 拖曳只會用到這幾個參數。整個節點深拷貝的話，匯入的模型會連
+   幾十萬個三角形一起複製一份，光點一下就要等。 */
+function dragCopy(n){
+  return {pos:n.pos.slice(),rot:n.rot.slice(),size:n.size.slice(),
+          post:n.post?n.post.slice():undefined};
+}
 const SNAP=1;
 function setPtr(e){
   const r=renderer.domElement.getBoundingClientRect();
@@ -768,8 +779,8 @@ renderer.domElement.addEventListener('pointerdown',e=>{
 
   const hh=ray.intersectObjects([yHandle,...handles,...rings].filter(o=>o.visible));
   if(hh.length){
-    pushUndo();
-    startState=selected.map(id=>JSON.parse(JSON.stringify(findNode(id))));
+    dragEdited=false;
+    startState=selected.map(id=>dragCopy(findNode(id)));
     const obj=hh[0].object;
     if(obj===yHandle){
       mode='moveY';start={p:hitVertical(yHandle.position)};return;
@@ -805,8 +816,8 @@ renderer.domElement.addEventListener('pointerdown',e=>{
     if(e.shiftKey){ selected.includes(id)?selected=selected.filter(s=>s!==id):selected.push(id); }
     else if(!selected.includes(id)){ selected=[id]; }
     drawTree();drawInspector();updateHandles();
-    pushUndo();
-    startState=selected.map(sid=>JSON.parse(JSON.stringify(findNode(sid))));
+    dragEdited=false;
+    startState=selected.map(sid=>dragCopy(findNode(sid)));
     mode='move';start={p:hitPlane(hits[0].point.y),y:hits[0].point.y};
     return;
   }
@@ -840,6 +851,8 @@ addEventListener('pointermove',e=>{
   if(mode==='move'){
     const p=hitPlane(start.y);if(!p)return;
     const dx=Math.round((p.x-start.p.x)/SNAP)*SNAP, dz=Math.round((p.z-start.p.z)/SNAP)*SNAP;
+    if(!dragEdited&&!dx&&!dz)return;      // 手震一兩格，不算動過
+    beginEdit();
     selected.forEach((id,i)=>{const n=findNode(id);
       n.pos[0]=startState[i].pos[0]+dx;n.pos[2]=startState[i].pos[2]+dz;});
     liveMove();return;
@@ -847,6 +860,8 @@ addEventListener('pointermove',e=>{
   if(mode==='moveY'){
     const p=hitVertical(yHandle.position);if(!p||!start.p)return;
     const dy=Math.round((p.y-start.p.y)/SNAP)*SNAP;
+    if(!dragEdited&&!dy)return;
+    beginEdit();
     selected.forEach((id,i)=>{findNode(id).pos[1]=startState[i].pos[1]+dy;});
     liveMove();return;
   }
@@ -855,6 +870,8 @@ addEventListener('pointermove',e=>{
     let deg=THREE.MathUtils.radToDeg(angleOn(start.axis,p,start.c)-start.a0);
     const step=e.shiftKey?1:15;
     deg=Math.round(deg/step)*step;
+    if(!dragEdited&&!deg)return;
+    beginEdit();
     const q=new THREE.Quaternion().setFromAxisAngle(start.nrm,THREE.MathUtils.degToRad(deg));
     const C=new THREE.Matrix4().makeTranslation(start.c.x,start.c.y,start.c.z);
     const Ci=new THREE.Matrix4().makeTranslation(-start.c.x,-start.c.y,-start.c.z);
@@ -899,6 +916,8 @@ addEventListener('pointermove',e=>{
       if(A==='xz'){ const f=Math.max(fx,fz); fx=fz=f; if(e.shiftKey)fy=f; }
     }
     const anchor=[start.ax,start.ay,start.az],F=[fx,fy,fz];
+    if(!dragEdited&&fx===1&&fy===1&&fz===1)return;
+    beginEdit();
     selected.forEach((id,i)=>{
       const n=findNode(id),s0=startState[i];
       const aligned=isAxisAligned(s0.rot);
@@ -958,8 +977,12 @@ addEventListener('pointerup',e=>{
     drawTree();drawInspector();updateHandles();
   }
   if(mode==='move'||mode==='moveY'||mode==='scaleH'||mode==='rotate'){
-    for(const m of meshes){m.position.set(0,0,0);m.scale.set(1,1,1);m.quaternion.identity();}
-    hideDim();rebuild();
+    hideDim();
+    if(dragEdited){
+      for(const m of meshes){m.position.set(0,0,0);m.scale.set(1,1,1);m.quaternion.identity();}
+      rebuild();
+    }
+    dragEdited=false;
   }
   mode=null;
 });

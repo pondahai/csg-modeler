@@ -76,6 +76,15 @@
 
 **幾何一律烘焙在世界座標。** `evalNode()` 回傳的多邊形已套用該節點的變換矩陣，所以 mesh 本身的 transform 永遠是單位矩陣。這讓包圍盒計算和把手定位變簡單。修改時要維持這個前提。
 
+**點一下選取不可以觸發重算。** 以前 pointerdown 一律 `pushUndo()` ＋深拷貝
+整個節點，pointerup 只要 mode 是 move/moveY/scaleH/rotate 就無條件 `rebuild()`
+——所以「點一下選一個東西」也會跑完整的布林運算。小模型看不出來，匯入大模型
+之後就是點一下等三十幾秒，使用者回報「選了之後第一次轉視角會卡很久」，其實
+卡的是那一下點選。現在 `pushUndo()` 延後到 `beginEdit()`（真的動到參數才呼叫），
+`dragEdited` 為假就不 rebuild，`startState` 也改用 `dragCopy()` 只複製
+pos/rot/size/post，不再連幾十萬個三角形一起複製。新增拖曳類操作時要沿用：
+**先判斷真的有變化，再 `beginEdit()`。**
+
 **拖曳時不重算 CSG。** 移動、縮放、旋轉的過程中只調整 mesh 的 transform 做預覽，放開滑鼠才呼叫 `rebuild()` 重算布林運算。因為 BSP 運算成本高，每格都算會頓。新增拖曳類操作時請沿用這個模式（參考 `liveMove()`、`liveScale()`）。
 
 **縮放分兩條路，看物件轉得正不正。** `size` 是物件自己的長寬高（旋轉之前），
