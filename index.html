@@ -1146,10 +1146,12 @@ addEventListener('pointerup',e=>{
   }
   if(mode==='move'||mode==='moveY'||mode==='scaleH'||mode==='rotate'){
     hideDim();
-    if(dragEdited){
-      for(const m of meshes){m.position.set(0,0,0);m.scale.set(1,1,1);m.quaternion.identity();}
-      rebuild();
-    }
+    /* 這裡不要清掉拖曳時的預覽位移。重算現在是分段跑的，中間隔著好幾十毫秒，
+       先清掉的話畫面會先把物件彈回原位、等新幾何體算好才跳過去——看起來就是
+       「放開時閃一下跳回去」。留著預覽，等 rebuildG 換上新的 mesh 那一瞬間
+       才消失（新 mesh 本來就是全新的、transform 是單位矩陣），中間完全接得上。
+       中途取消也是對的：畫面就停在你放手的位置。 */
+    if(dragEdited)rebuild();
     dragEdited=false;
   }
   mode=null;
