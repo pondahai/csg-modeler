@@ -135,10 +135,12 @@
   <button id="btnSave">存檔</button>
   <button id="btnOpen">開啟</button>
   <button id="btnPlace">插入元件</button>
+  <button id="btnImportStl">匯入 STL</button>
   <button id="btnObj">匯出 OBJ</button>
   <button id="btnStl">匯出 STL</button>
   <input type="file" id="fileIn" accept=".json,.csg" style="display:none">
   <input type="file" id="filePlace" accept=".json,.csg" style="display:none">
+  <input type="file" id="fileStl" accept=".stl" style="display:none">
 </div>
 
 <aside id="tree"><h2>物件樹</h2><div id="treeBody"></div></aside>
@@ -300,7 +302,7 @@ let selected=[];       // 選取的最上層物件 id
 let undoStack=[], redoStack=[];
 
 // 每種形狀有自己的固定顏色，一眼認得出誰是誰
-const SHAPE_COLOR={box:'#5b8dd6',cylinder:'#e0a83c',sphere:'#6fb98f'};
+const SHAPE_COLOR={box:'#5b8dd6',cylinder:'#e0a83c',sphere:'#6fb98f',mesh:'#b07ad6'};
 function makeShape(shape){
   const size=[20,20,20];
   return {id:uid++,kind:'shape',shape,role:'solid',
@@ -332,6 +334,14 @@ function evalNode(n){
   let polys;
   if(n.kind==='shape'){
     const g=baseGeo(n.shape).toNonIndexed();
+    g.applyMatrix4(matrixOf(n));
+    polys=geoToPolys(g);
+    g.dispose();
+  } else if(n.kind==='mesh'){
+    // 匯入的三角形存成「塞進 1×1×1 方框」的樣子，實際尺寸一樣靠 size 縮放，
+    // 所以它跟方塊圓柱走完全同一條路，可以當實體也可以當孔洞。
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.Float32BufferAttribute(Float32Array.from(n.tri),3));
     g.applyMatrix4(matrixOf(n));
     polys=geoToPolys(g);
     g.dispose();
@@ -440,13 +450,15 @@ function rebuild(){
   document.getElementById('busy').style.display='block';
   requestAnimationFrame(()=>{
     const t0=performance.now();
+    buildFail=0;
     while(objLayer.children.length){
       const m=objLayer.children.pop();m.geometry.dispose();m.material.dispose();
     }
     meshes.length=0;
     for(const n of roots){
       let geo;
-      try{ geo=polysToGeo(evalNode(n)); }catch(e){ console.warn(e); geo=new THREE.BufferGeometry(); }
+      try{ geo=polysToGeo(evalNode(n)); }
+      catch(e){ console.warn(e); geo=new THREE.BufferGeometry(); buildFail++; }
       const isHole=n.role==='hole';
       const mat=new THREE.MeshLambertMaterial({
         color:isHole?0xe8657f:new THREE.Color(n.color||'#5b8dd6'),
@@ -741,6 +753,7 @@ renderer.domElement.addEventListener('wheel',e=>{
 function nodeLabel(n){
   if(n.name)return n.name;
   if(n.kind==='group')return '組合';
+  if(n.kind==='mesh')return '匯入';
   return {box:'方塊',cylinder:'圓柱',sphere:'球'}[n.shape];
 }
 function drawTree(){
@@ -823,7 +836,7 @@ function drawInspector(){
     ${num('X',n.pos[0],'pos',0)}${num('Y',n.pos[1],'pos',1)}${num('Z',n.pos[2],'pos',2)}
     <div class="grp"><h2>旋轉 度</h2></div>
     ${num('X',n.rot[0],'rot',0)}${num('Y',n.rot[1],'rot',1)}${num('Z',n.rot[2],'rot',2)}
-    ${n.kind==='shape'?`<div class="grp"><h2>顏色</h2></div>
+    ${n.kind!=='group'?`<div class="grp"><h2>顏色</h2></div>
       <input type="color" value="${n.color}" id="col">`:''}
     <div class="grp"><h2>放到地面</h2></div>
     <button id="drop" style="width:100%">貼齊工作平面</button>`;
@@ -957,7 +970,7 @@ document.getElementById('fileIn').onchange=e=>{
 };
 
 /* ---- 自動暫存：關掉再開回到原狀 ---- */
-let saveChars=0, saveFull=false;
+let saveChars=0, saveFull=false, buildFail=0;
 function autosave(){
   const str=JSON.stringify({roots,uid});
   saveChars=str.length;
@@ -997,7 +1010,8 @@ function updateGauge(tris,ms){
   document.getElementById('gMsN').textContent=Math.round(ms)+'ms';
   const note=document.getElementById('gNote');
   let msg='';
-  if(saveFull)msg='暫存已滿，請手動存檔！';
+  if(buildFail)msg='有物件算不出來，面數太高了';
+  else if(saveFull)msg='暫存已滿，請手動存檔！';
   else if(saveChars/GAUGE_MAX.mem>=.8)msg='暫存快滿了，記得存檔';
   else if(tris/GAUGE_MAX.face>=.8)msg='面數偏高，操作會變慢';
   note.textContent=msg;
@@ -1040,6 +1054,100 @@ document.getElementById('filePlace').onchange=e=>{
     }catch(err){alert('這個檔案讀不進來：'+err.message);}
   };
   r.readAsText(f);
+  e.target.value='';
+};
+
+/* ---- 匯入 STL：當成一種可加減的元件 ----
+   進來的三角形會被搬到原點、塞進 1×1×1 的方框，實際尺寸記在 size 裡，
+   所以它在樹上跟方塊圓柱是同一種東西：可以搬、可以縮放、可以切成孔洞。
+   面數是布林運算的成本來源，所以匯入時就先把關。 */
+/* 這兩個數字是實測出來的，不是猜的：
+   在方塊上挖一個匯入的球，3200 面約 1.3 秒還能用，7200 面時 BSP 遞迴就會
+   爆堆疊（Maximum call stack size exceeded），結果整個算不出來。
+   等 BSP 改成非遞迴之後，這裡才有本錢往上調。 */
+const STL_SOFT=2000, STL_HARD=5000;
+
+function parseSTL(buf){
+  const dv=new DataView(buf);
+  let binary=false;
+  if(buf.byteLength>=84){
+    const n=dv.getUint32(80,true);
+    if(84+n*50===buf.byteLength)binary=true;
+  }
+  const out=[];
+  const push=(x,y,z)=>{
+    // STL 慣例是 Z 軸朝上，我們的世界是 Y 軸朝上（跟匯出時的轉換互為反向）
+    out.push(x,z,-y);
+  };
+  if(binary){
+    const n=dv.getUint32(80,true);
+    let o=84;
+    for(let i=0;i<n;i++){
+      o+=12;                                   // 法線交給 geoToPolys 自己算
+      for(let k=0;k<3;k++){
+        push(dv.getFloat32(o,true),dv.getFloat32(o+4,true),dv.getFloat32(o+8,true));
+        o+=12;
+      }
+      o+=2;
+    }
+  } else {
+    const txt=new TextDecoder().decode(buf);
+    const re=/vertex\s+(-?[\d.eE+-]+)\s+(-?[\d.eE+-]+)\s+(-?[\d.eE+-]+)/g;
+    let m;
+    while((m=re.exec(txt)))push(+m[1],+m[2],+m[3]);
+  }
+  if(out.length<9||out.length%9)throw new Error('這個檔案裡找不到完整的三角形');
+  return out;
+}
+
+// 搬到原點並壓成 1×1×1，回傳 {tri, size}
+function normalizeTris(v){
+  let mnx=1/0,mny=1/0,mnz=1/0,mxx=-1/0,mxy=-1/0,mxz=-1/0;
+  for(let i=0;i<v.length;i+=3){
+    if(v[i]<mnx)mnx=v[i];      if(v[i]>mxx)mxx=v[i];
+    if(v[i+1]<mny)mny=v[i+1];  if(v[i+1]>mxy)mxy=v[i+1];
+    if(v[i+2]<mnz)mnz=v[i+2];  if(v[i+2]>mxz)mxz=v[i+2];
+  }
+  const dim=[mxx-mnx,mxy-mny,mxz-mnz].map(d=>d>1e-6?d:1e-6);
+  const ctr=[(mnx+mxx)/2,(mny+mxy)/2,(mnz+mxz)/2];
+  const tri=new Array(v.length);
+  for(let i=0;i<v.length;i+=3)
+    for(let k=0;k<3;k++)
+      tri[i+k]=Math.round((v[i+k]-ctr[k])/dim[k]*1e5)/1e5;
+  return {tri, size:dim.map(d=>Math.round(d*1e3)/1e3), height:mxy-mny};
+}
+
+document.getElementById('btnImportStl').onclick=()=>document.getElementById('fileStl').click();
+document.getElementById('fileStl').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const v=parseSTL(r.result);
+      const tris=v.length/9;
+      if(tris>STL_HARD){
+        alert(`這個 STL 有 ${tris.toLocaleString()} 個面，太細了。\n`+
+              `目前一次最多吃 ${STL_HARD.toLocaleString()} 個面，再多布林運算會直接算不出來。\n`+
+              `請先用其他軟體減面，或換一個比較簡單的模型。`);
+        return;
+      }
+      if(tris>STL_SOFT&&!confirm(
+        `這個 STL 有 ${tris.toLocaleString()} 個面，算是偏重的。\n`+
+        `放進來之後每次移動、縮放放開滑鼠都要重算，可能會頓幾秒。\n`+
+        `右下角油表會告訴你還剩多少餘裕。\n\n要繼續嗎？`))return;
+
+      const {tri,size,height}=normalizeTris(v);
+      pushUndo();
+      const n={id:uid++,kind:'mesh',role:'solid',
+               pos:[0,height/2,0],rot:[0,0,0],size,
+               color:SHAPE_COLOR.mesh,
+               name:f.name.replace(/\.stl$/i,''),
+               tri};
+      roots.push(n);selected=[n.id];rebuild();
+    }catch(err){alert('這個 STL 讀不進來：'+err.message);}
+  };
+  r.onerror=()=>alert('檔案讀取失敗。');
+  r.readAsArrayBuffer(f);
   e.target.value='';
 };
 
