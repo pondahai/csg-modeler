@@ -38,14 +38,16 @@
 3. **3D 場景** — three.js 初始化、`rebuild()`、把手
 4. **滑鼠互動** — 選取、移動、縮放、旋轉
 5. **面板** — 物件樹、屬性面板
-6. **指令** — 工具列按鈕、存檔、匯入、匯出
+6. **指令** — 工具列按鈕、檔案選單、存檔、匯入、匯出
 
 ### 資料結構
 
 ```js
 {
-  id, kind: 'shape' | 'group',
+  id, kind: 'shape' | 'group' | 'mesh',
   shape: 'box' | 'cylinder' | 'sphere',   // kind 為 shape 時
+  tri: [x,y,z, ...],                       // kind 為 mesh 時（匯入的 STL）。
+                                           // 已經搬到原點、正規化成 1×1×1
   role: 'solid' | 'hole',                  // 決定在父層是加還是減
   pos: [x,y,z], rot: [x,y,z],              // rot 單位為「度」
   size: [x,y,z],                           // 物件自己的長寬高（旋轉之前）
@@ -100,6 +102,10 @@
 **新增一種形狀**：改 `baseGeo()`（回傳邊長為 1 的單位幾何，實際尺寸靠 `size` 縮放）、`SHAPE_COLOR`、`nodeLabel()`，並在工具列加按鈕。
 
 **新增一個把手**：加到 `handles` 陣列或另建 mesh，在 `placeHandles()` 裡定位，在 pointerdown 的把手判定清單裡加入，並在 pointermove 加對應的 mode 分支。
+
+**工具列**：檔案相關的六個動作（存檔、開啟、插入元件、匯入 STL、匯出 STL／OBJ）
+收在 `#fileMenu` 這個下拉選單裡，分區標題用白話寫（「放東西進來」而不是「匯入」），
+因為使用者是學生。新增檔案類動作請放進這個選單，不要再往工具列加按鈕。
 
 **改變外觀**：CSS 變數在 `:root`，3D 場景的顏色在 three.js 初始化那一段。工作區背景是淡米黃，兩側面板是深色。
 
