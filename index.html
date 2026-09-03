@@ -726,35 +726,49 @@ function* geoForRootG(n){
   }
   return geo;
 }
+function addMesh(n,geo){
+  const isHole=n.role==='hole';
+  const mat=new THREE.MeshLambertMaterial({
+    color:isHole?0xe8657f:new THREE.Color(n.color||'#5b8dd6'),
+    transparent:isHole,opacity:isHole?.32:1,
+    depthWrite:!isHole,side:THREE.DoubleSide});
+  const mesh=new THREE.Mesh(geo,mat);
+  mesh.userData.id=n.id;
+  objLayer.add(mesh);meshes.push(mesh);
+}
+/* 兩種上場方式：
+   - 畫面本來就是空的（剛開啟網頁、剛開檔）：算好一個就掛一個，先算完的
+     先出現。總時間一樣，但不必對著空白畫面乾等，而且先出現的就能先轉來看。
+     這時 my.built 要放掉，因為東西已經在場上了——中途取消的話留著半場
+     沒關係（下一次重算走的是換場那條路，會把它們清乾淨）。
+   - 畫面上已經有東西（編輯途中）：維持原本的做法，全部算完才一次換上，
+     免得看到半成品，中途取消也還是上一版完整的畫面。 */
 function* rebuildG(my){
   buildFail=0;
+  const stream=objLayer.children.length===0;
   const built=[];
-  my.built=built;
+  my.built=stream?null:built;
+  if(stream){meshes.length=0;drawTree();}   // 清單先出來，讓人知道要等什麼
   for(let i=0;i<roots.length;i++){
     const n=roots[i];
     my.stage=roots.length>1?`計算中 ${i+1}/${roots.length}`:'計算中';
-    built.push({n,geo:yield* geoForRootG(n)});
+    const geo=yield* geoForRootG(n);
+    if(stream)addMesh(n,geo);
+    else built.push({n,geo});
     yield;
   }
   // 已經不在場上的就別佔記憶體了
   for(const [id,v] of geoCache){
     if(!roots.some(r=>r.id===id)){v.geo.dispose();geoCache.delete(id);}
   }
-  // 算完了才換上去
-  my.built=null;
-  while(objLayer.children.length){
-    const m=objLayer.children.pop();m.geometry.dispose();m.material.dispose();
-  }
-  meshes.length=0;
-  for(const {n,geo} of built){
-    const isHole=n.role==='hole';
-    const mat=new THREE.MeshLambertMaterial({
-      color:isHole?0xe8657f:new THREE.Color(n.color||'#5b8dd6'),
-      transparent:isHole,opacity:isHole?.32:1,
-      depthWrite:!isHole,side:THREE.DoubleSide});
-    const mesh=new THREE.Mesh(geo,mat);
-    mesh.userData.id=n.id;
-    objLayer.add(mesh);meshes.push(mesh);
+  if(!stream){
+    // 算完了才換上去
+    my.built=null;
+    while(objLayer.children.length){
+      const m=objLayer.children.pop();m.geometry.dispose();m.material.dispose();
+    }
+    meshes.length=0;
+    for(const {n,geo} of built)addMesh(n,geo);
   }
   drawTree();drawInspector();updateHandles();autosave();
   let tris=0;
