@@ -148,7 +148,7 @@
 </div>
 
 <aside id="tree"><h2>物件樹</h2><div id="treeBody"></div></aside>
-<div id="view"><div id="busy">計算中</div><div id="marquee"></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="note" id="gNote"></div></div><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>中鍵拖＝轉視角（沒有中鍵就按住 Alt 拖）　右鍵拖＝平移</div></div>
+<div id="view"><div id="busy">計算中</div><div id="marquee"></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="note" id="gNote"></div></div><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>右鍵拖＝轉視角　中鍵拖＝平移（沒有中鍵就按住 Alt 拖）</div></div>
 <div id="dim"></div>
 <aside id="insp"><h2>屬性</h2><div id="inspBody"></div></aside>
 
@@ -619,9 +619,9 @@ renderer.domElement.addEventListener('contextmenu',e=>e.preventDefault());
 renderer.domElement.addEventListener('pointerdown',e=>{
   renderer.domElement.setPointerCapture(e.pointerId);
   setPtr(e);
-  // 中鍵拖＝轉視角。筆電觸控板常常沒有中鍵，所以 Alt＋左鍵也是轉視角。
-  if(e.button===1||(e.button===0&&e.altKey)){mode='orbit';start={x:e.clientX,y:e.clientY};return;}
-  if(e.button===2){mode='pan';start={x:e.clientX,y:e.clientY};return;}
+  // 中鍵拖＝平移。筆電觸控板常常沒有中鍵，所以 Alt＋左鍵也是平移。
+  if(e.button===1||(e.button===0&&e.altKey)){mode='pan';start={x:e.clientX,y:e.clientY};return;}
+  if(e.button===2){mode='orbit';start={x:e.clientX,y:e.clientY};return;}
 
   const hh=ray.intersectObjects([yHandle,...handles,...rings].filter(o=>o.visible));
   if(hh.length){
