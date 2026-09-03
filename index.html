@@ -324,14 +324,30 @@ function baseGeo(shape){
   if(shape==='cylinder')return new THREE.CylinderGeometry(.5,.5,1,48);
   return new THREE.SphereGeometry(.5,32,20);
 }
-function matrixOf(n){
-  const m=new THREE.Matrix4();
+/* post：轉完之後才套上去的「世界方向拉伸」，預設 [1,1,1]。
+   size 是物件自己的長寬高（旋轉之前），post 是貼著世界軸的變形。
+   有了它，物件轉斜之後拉哪一邊就真的往那一邊變形——這是刻意的取捨，
+   代價是拉過之後再去轉它，形狀會跟著歪（因為變形是黏在世界軸上的）。
+   矩陣順序：位移 · post · 旋轉 · size，所以 post 是繞物件自己的中心縮放，
+   不會把物件推走，錨點那套算法照樣成立。 */
+function postOf(n){const p=n.post;return (p&&(p[0]!==1||p[1]!==1||p[2]!==1))?p:null;}
+function matrixOf(n,usePost=true){
   const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(
     THREE.MathUtils.degToRad(n.rot[0]),
     THREE.MathUtils.degToRad(n.rot[1]),
     THREE.MathUtils.degToRad(n.rot[2]),'XYZ'));
-  m.compose(new THREE.Vector3(...n.pos),q,new THREE.Vector3(...n.size));
-  return m;
+  const p=usePost?postOf(n):null;
+  if(!p)return new THREE.Matrix4().compose(
+    new THREE.Vector3(...n.pos),q,new THREE.Vector3(...n.size));
+  const A=new THREE.Matrix4().makeRotationFromQuaternion(q)
+          .scale(new THREE.Vector3(...n.size));
+  return new THREE.Matrix4().makeTranslation(n.pos[0],n.pos[1],n.pos[2])
+    .multiply(new THREE.Matrix4().makeScale(p[0],p[1],p[2]))
+    .multiply(A);
+}
+// 轉角是不是 90 度的整數倍？是的話世界軸和自身軸對得起來，走精確的老路。
+function isAxisAligned(rot){
+  return rot.every(d=>Math.abs(((d%90)+90)%90)<.5||Math.abs(((d%90)+90)%90-90)<.5);
 }
 /* 世界的某一根軸，對應到這個物件自己的哪一根軸？
    size 記的是物件「旋轉之前」的長寬高，但縮放是在世界座標上量的。
@@ -745,7 +761,7 @@ addEventListener('pointermove',e=>{
     const W=new THREE.Matrix4().multiplyMatrices(C,new THREE.Matrix4().multiplyMatrices(R,Ci));
     selected.forEach((id,i)=>{
       const n=findNode(id);
-      const M=new THREE.Matrix4().multiplyMatrices(W,matrixOf(startState[i]));
+      const M=new THREE.Matrix4().multiplyMatrices(W,matrixOf(startState[i],false));
       const t=new THREE.Vector3(),qq=new THREE.Quaternion(),s=new THREE.Vector3();
       M.decompose(t,qq,s);
       const eu=new THREE.Euler().setFromQuaternion(qq,'XYZ');
@@ -784,11 +800,19 @@ addEventListener('pointermove',e=>{
     const anchor=[start.ax,start.ay,start.az],F=[fx,fy,fz];
     selected.forEach((id,i)=>{
       const n=findNode(id),s0=startState[i];
-      const map=axisMap(s0);            // 世界軸 → 這個物件自己的軸
+      const aligned=isAxisAligned(s0.rot);
+      const map=aligned?axisMap(s0):null;   // 世界軸 → 這個物件自己的軸
+      if(!aligned)n.post=(s0.post||[1,1,1]).slice();
       for(let k=0;k<3;k++){
         if(F[k]===1)continue;
-        const j=map[k];                 // 倍率要套在自身的第 j 格，不是第 k 格
-        n.size[j]=Math.max(.5,Math.round(s0.size[j]*F[k]*10)/10);
+        if(aligned){
+          const j=map[k];               // 倍率要套在自身的第 j 格，不是第 k 格
+          n.size[j]=Math.max(.5,Math.round(s0.size[j]*F[k]*10)/10);
+        }else{
+          // 轉斜了：把倍率直接記成世界方向的拉伸，拉哪邊就往哪邊變形
+          n.post[k]=Math.max(.02,Math.min(50,
+            Math.round((s0.post?s0.post[k]:1)*F[k]*1e4)/1e4));
+        }
         n.pos[k]=Math.round((anchor[k]+(s0.pos[k]-anchor[k])*F[k])*10)/10;
       }
     });
@@ -987,6 +1011,8 @@ document.getElementById('btnUngroup').onclick=()=>{
     const G=matrixOf(g);
     for(const c of g.children){
       const M=new THREE.Matrix4().multiplyMatrices(G,matrixOf(c));
+      // 分解不出斜拉，所以拆開之後 post 就地歸零（形狀已經烘進 size/rot 裡）
+      delete c.post;
       const p=new THREE.Vector3(),q=new THREE.Quaternion(),s=new THREE.Vector3();
       M.decompose(p,q,s);
       const e=new THREE.Euler().setFromQuaternion(q,'XYZ');
