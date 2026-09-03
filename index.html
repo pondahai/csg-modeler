@@ -1301,7 +1301,8 @@ document.getElementById('filePlace').onchange=e=>{
    在方塊上挖一個匯入的球，3600 面約 0.5 秒、8100 面約 4 秒、
    14400 面約 12 秒，25600 面要一分鐘——那已經不能用了。
    所以門檻改成「會頓就先問、久到不能用就擋」。
-   再要往上，下一步是減面（decimation），不是再調大這兩個數字。 */
+   不要用自動減面（decimation）來換取更高的上限：匯入的東西必須跟原檔
+   一致，簡化會把螺紋、印章圖案磨掉，而使用者不會發現。 */
 const STL_SOFT=5000, STL_HARD=15000;
 
 function parseSTL(buf){
@@ -1365,7 +1366,7 @@ document.getElementById('fileStl').onchange=e=>{
       if(tris>STL_HARD){
         alert(`這個 STL 有 ${tris.toLocaleString()} 個面，太細了。\n`+
               `目前一次最多吃 ${STL_HARD.toLocaleString()} 個面，再多的話每次重算都要等一分鐘以上。\n`+
-              `請先用其他軟體減面，或換一個比較簡單的模型。`);
+              `請先用其他軟體把面數降下來，或換一個比較簡單的模型。`);
         return;
       }
       if(tris>STL_SOFT&&!confirm(
