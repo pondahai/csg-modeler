@@ -1226,9 +1226,15 @@ function autoload(){
    面數  = 布林運算的成本來源，超過就會開始頓
    暫存  = localStorage 大約 5MB，滿了關掉瀏覽器就救不回來
    重算  = 上次 rebuild() 實際花的時間，最誠實的一個 */
-/* 上限開到十萬面之後，舊的 30000／1500ms 會整天滿格，油針就沒有意義了。
-   face 對齊 STL_HARD，ms 定在 10 秒——超過十秒操作起來就已經很痛苦。 */
-const GAUGE_MAX={face:100000, mem:5e6, ms:10000};
+/* 刻度是照實際使用回報訂的，不是照理論值。
+   實測回報：場上 379k 面、重算 33 秒，算完之後轉視角、拖曳一樣順——
+   因為畫圖是顯示卡的事，三十幾萬個三角形對它不算什麼。所以 face 這根
+   油針不該早早就滿，滿格放到 400k。
+   ms 才是真正會痛的那個（每次放開滑鼠都要再等一次），滿格放到 60 秒：
+   33 秒落在黃燈，意思是「還能用，但你每動一下就要等這麼久」。
+   mem 維持 5MB——那是 localStorage 的硬限制，而且滿了會真的掉東西，
+   是三根裡面唯一會造成「資料不見」的，不要為了畫面好看調寬。 */
+const GAUGE_MAX={face:400000, mem:5e6, ms:60000};
 function setBar(id,ratio){
   const el=document.getElementById(id);
   const r=Math.min(1,ratio);
@@ -1250,6 +1256,7 @@ function updateGauge(tris,ms){
   if(buildFail)msg='有物件算不出來，面數太高了';
   else if(saveFull)msg='暫存已滿，請手動存檔！';
   else if(saveChars/GAUGE_MAX.mem>=.8)msg='暫存快滿了，記得存檔';
+  else if(ms/GAUGE_MAX.ms>=.5)msg='每次放開滑鼠都要重算這麼久，動之前先想一下';
   else if(tris/GAUGE_MAX.face>=.8)msg='面數偏高，操作會變慢';
   note.textContent=msg;
   note.style.display=msg?'block':'none';
