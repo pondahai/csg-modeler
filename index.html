@@ -239,10 +239,28 @@ class Plane {
     }
   }
 }
+/* Newell 法：把每條邊的貢獻加起來算法向量。
+   比「拿前三個點做外積」穩定得多——多邊形被切成細長條之後，
+   前三個點常常幾乎共線，外積會算出接近零的向量，方向整個亂掉，
+   後續的布林運算就會把面分錯邊，牆就是這樣破的。 */
+function newellNormal(vs){
+  let x=0,y=0,z=0;
+  for(let i=0;i<vs.length;i++){
+    const a=vs[i].pos, b=vs[(i+1)%vs.length].pos;
+    x+=(a.y-b.y)*(a.z+b.z);
+    y+=(a.z-b.z)*(a.x+b.x);
+    z+=(a.x-b.x)*(a.y+b.y);
+  }
+  const len=Math.sqrt(x*x+y*y+z*z);
+  return len>1e-12?new V(x/len,y/len,z/len):null;
+}
 class Poly {
   constructor(vertices,plane){
     this.vertices=vertices;
-    this.plane=plane||Plane.fromPoints(vertices[0].pos,vertices[1].pos,vertices[2].pos);
+    if(plane){this.plane=plane;return;}
+    const n=newellNormal(vertices);
+    this.plane = n ? new Plane(n,n.dot(vertices[0].pos))
+                   : Plane.fromPoints(vertices[0].pos,vertices[1].pos,vertices[2].pos);
   }
   clone(){return new Poly(this.vertices.map(v=>v.clone()),this.plane.clone());}
   flip(){this.vertices.reverse();this.plane.flip();}
@@ -299,6 +317,24 @@ function csg(pa,pb,op){
   }
   a.invert(); b.clipTo(a); b.invert(); a.clipTo(b); b.clipTo(a);
   a.build(b.allPolygons()); a.invert(); return a.allPolygons();
+}
+/* 直接把矩陣套在多邊形上。
+   以前是 polysToGeo → applyMatrix4 → geoToPolys 繞一圈，那會把多邊形
+   全部切成三角形，還會在轉回來時丟掉退化的碎片，等於每包一層組合就
+   累積一次誤差、破一次洞。直接搬頂點就沒有這個問題，也快得多。 */
+function transformPolys(polys,m){
+  const out=[];
+  const t=new THREE.Vector3();
+  for(const poly of polys){
+    const vs=poly.vertices.map(v=>{
+      t.set(v.pos.x,v.pos.y,v.pos.z).applyMatrix4(m);
+      return new Vtx(new V(t.x,t.y,t.z));
+    });
+    const n=newellNormal(vs);
+    if(!n)continue;                       // 真的壓成一條線了才丟掉
+    out.push(new Poly(vs,new Plane(n,n.dot(vs[0].pos))));
+  }
+  return out;
 }
 function geoToPolys(g){
   const p=g.attributes.position, out=[];
@@ -432,10 +468,7 @@ function evalNode(n){
       if(!acc.length)break;
       acc=csg(acc,evalNode(c),'subtract');
     }
-    const g=polysToGeo(acc);
-    g.applyMatrix4(matrixOf(n));
-    polys=geoToPolys(g);
-    g.dispose();
+    polys=transformPolys(acc,matrixOf(n));
   }
   return polys;
 }
