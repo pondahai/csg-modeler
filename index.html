@@ -638,6 +638,49 @@ const meshes=[];
 
    新的幾何體先收在 built 裡，全部算完才一次換上場景。這樣中途取消或
    被下一次重算取代時，畫面維持上一版完整的結果，不會看到半成品。 */
+/* ---- 幾何體快取：沒被動到的東西不要重算 ----
+   以前每次重算都把場上每一個最上層物件從頭算一遍，所以：
+     - 移動 A，完全沒被碰到的 B（可能是很重的組合）也跟著重算
+     - 移動組合自己時，裡面的加減關係根本沒變，卻整包重算一次
+   兩個都是白算的。實際回報：巨量面數的組合一移動就要等幾十秒。
+
+   鑰匙（geoKey）只放「會改變形狀」的東西：
+     - 最上層物件自己的 pos/rot/size/post 不放——那只影響最外層那個矩陣，
+       換位置直接把舊的幾何體套一次差值矩陣就好，不必重算布林運算
+     - role/color/name 不放——那只影響材質
+     - 子節點則連自己的 pos/rot/size/post/role 一起放，那真的會改形狀
+   匯入的 tri 不 stringify（幾十萬個數字，光算鑰匙就要等），改用 id＋長度：
+   tri 匯入之後就不再變動。
+
+   套差值矩陣一律從「當初算出來的那一份」出發，不是接著上一次的結果再套，
+   免得搬個十次就累積出誤差。快取自己留一份，場景上永遠是它的複製品，
+   這樣誰該被 dispose 很清楚，不會重複釋放。
+   代價是幾何體記憶體大約多一倍（379k 面約多 27MB），換掉幾十秒的等待。 */
+const geoCache=new Map();
+function kindKey(n){
+  if(n.kind==='shape')return 's'+n.shape;
+  if(n.kind!=='mesh')return 'g';
+  // 不整包 stringify（幾十萬個數字），改用長度＋幾個取樣點。
+  // 光靠 id 不夠：換一個檔案可能出現相同編號卻是不同模型。
+  const t=n.tri,L=t.length;
+  return `m${L}.${t[0]},${t[L>>1]},${t[L-1]}`;
+}
+function subKey(n){
+  return kindKey(n)+`|${n.pos}|${n.rot}|${n.size}|${n.post||''}|${n.role}`+
+         (n.children?'('+n.children.map(subKey).join(',')+')':'');
+}
+function geoKey(n){
+  return kindKey(n)+(n.children?'('+n.children.map(subKey).join(',')+')':'');
+}
+function dropGeoCache(){
+  for(const v of geoCache.values())v.geo.dispose();
+  geoCache.clear();
+}
+function sameMat(a,b){
+  for(let i=0;i<16;i++)if(Math.abs(a.elements[i]-b.elements[i])>1e-9)return false;
+  return true;
+}
+
 const SLICE=25;
 let job=null;
 const chan=(typeof MessageChannel!=='undefined')?new MessageChannel():null;
@@ -657,12 +700,34 @@ function* rebuildG(my){
   const built=[];
   my.built=built;
   for(let i=0;i<roots.length;i++){
+    const n=roots[i];
     my.stage=roots.length>1?`${i+1}/${roots.length}`:'';
+    const key=geoKey(n), M=matrixOf(n), c=geoCache.get(n.id);
     let geo;
-    try{ geo=polysToGeo(yield* evalNodeG(roots[i])); }
-    catch(e){ console.warn(e); geo=new THREE.BufferGeometry(); buildFail++; }
-    built.push({n:roots[i],geo});
+    if(c&&c.key===key){
+      // 形狀沒變，只是換了位置／角度／大小：套一次差值矩陣就好
+      geo=c.geo.clone();
+      if(!sameMat(c.mat,M)){
+        geo.applyMatrix4(new THREE.Matrix4().multiplyMatrices(
+          M,new THREE.Matrix4().copy(c.mat).invert()));
+      }
+    }else{
+      let ok=true;
+      try{ geo=polysToGeo(yield* evalNodeG(n)); }
+      catch(e){ console.warn(e); geo=new THREE.BufferGeometry(); buildFail++; ok=false; }
+      if(ok){                       // 算失敗的不要進快取，否則永遠不會再試一次
+        if(c)c.geo.dispose();
+        geoCache.set(n.id,{key,mat:M.clone(),geo:geo.clone()});
+      }else if(c){
+        c.geo.dispose();geoCache.delete(n.id);
+      }
+    }
+    built.push({n,geo});
     yield;
+  }
+  // 已經不在場上的就別佔記憶體了
+  for(const [id,v] of geoCache){
+    if(!roots.some(r=>r.id===id)){v.geo.dispose();geoCache.delete(id);}
   }
   // 算完了才換上去
   my.built=null;
@@ -1321,6 +1386,7 @@ document.getElementById('fileIn').onchange=e=>{
       const d=JSON.parse(r.result);
       if(!Array.isArray(d.roots))throw new Error('格式不符');
       pushUndo();
+      dropGeoCache();          // 換一個檔案，舊的幾何體全部作廢
       roots=d.roots;uid=d.uid||(1+Math.max(0,...JSON.stringify(d.roots).match(/"id":(\d+)/g)
         .map(s=>+s.split(':')[1])));
       selected=[];rebuild();
@@ -1344,7 +1410,7 @@ function autoload(){
     if(!s)return false;
     const d=JSON.parse(s);
     if(!Array.isArray(d.roots)||!d.roots.length)return false;
-    roots=d.roots;uid=d.uid;return true;
+    dropGeoCache();roots=d.roots;uid=d.uid;return true;
   }catch(e){return false;}
 }
 
