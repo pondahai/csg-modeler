@@ -70,7 +70,12 @@
   .title{font-weight:600;letter-spacing:.02em;margin-right:8px;}
   .title span{color:var(--dim);font-weight:400;}
   aside{background:var(--panel);overflow-y:auto;}
-  #tree{grid-area:tree;border-right:1px solid var(--line);padding:10px;}
+  /* 物件樹是上下兩段：樹自己會捲，油表釘在最下面不跟著捲走 */
+  #tree{
+    grid-area:tree;border-right:1px solid var(--line);padding:10px;
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+  #treeBody{flex:1;overflow-y:auto;min-height:0;}
   #insp{grid-area:insp;border-left:1px solid var(--line);padding:10px;}
   #view{grid-area:view;position:relative;}
   canvas{display:block;}
@@ -83,6 +88,8 @@
   .node.sel{background:#2b3a4e;box-shadow:inset 2px 0 0 var(--focus);}
   .node .dot{width:8px;height:8px;border-radius:2px;flex:none;}
   .node .rl{color:var(--dim);font-size:11px;}
+  .node .fc{margin-left:auto;padding-left:6px;color:var(--dim);font-size:10px;
+            font-variant-numeric:tabular-nums;flex:none;}
   .kids{margin-left:13px;border-left:1px solid var(--line);padding-left:6px;}
   .row{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
   .row label{width:16px;color:var(--dim);}
@@ -118,20 +125,19 @@
     border:1px solid #3b7fd4;background:rgba(59,127,212,.14);
   }
   #gauge{
-    position:absolute;right:12px;bottom:12px;width:186px;
-    background:rgba(255,252,244,.92);border:1px solid #cfc6ae;border-radius:5px;
-    padding:7px 9px;font-size:11px;color:#6b6353;
+    flex:none;margin-top:10px;padding-top:9px;border-top:1px solid var(--line);
+    font-size:11px;color:var(--dim);
     font-variant-numeric:tabular-nums;user-select:none;
   }
   #gauge .row{display:flex;align-items:center;gap:6px;margin-bottom:4px;}
   #gauge .row:last-child{margin-bottom:0;}
   #gauge .lbl{width:34px;flex:none;}
   #gauge .val{width:52px;flex:none;text-align:right;}
-  #gauge .track{flex:1;height:6px;border-radius:3px;background:#e2d9c4;overflow:hidden;}
+  #gauge .track{flex:1;height:6px;border-radius:3px;background:var(--ink);overflow:hidden;}
   #gauge .fill{height:100%;width:0;background:#5aa469;transition:width .18s linear;}
   #gauge .fill.warn{background:#e0a13b;}
   #gauge .fill.hot{background:#d2523f;}
-  #gauge .note{margin-top:4px;color:#a8442f;font-weight:600;display:none;}
+  #gauge .note{margin-top:5px;color:#f0836e;font-weight:600;display:none;white-space:normal;line-height:1.35;}
   #busy{
     position:absolute;top:12px;left:50%;transform:translateX(-50%);
     background:var(--focus);color:#241d05;padding:4px 6px 4px 12px;border-radius:20px;
@@ -180,8 +186,8 @@
   <input type="file" id="fileStl" accept=".stl" style="display:none">
 </div>
 
-<aside id="tree"><h2>物件樹</h2><div id="treeBody"></div></aside>
-<div id="view"><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="note" id="gNote"></div></div><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>右鍵拖＝轉視角　中鍵拖＝平移（沒有中鍵就按住 Alt 拖）</div></div>
+<aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="note" id="gNote"></div></div></aside>
+<div id="view"><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>右鍵拖＝轉視角　中鍵拖＝平移（沒有中鍵就按住 Alt 拖）</div></div>
 <div id="dim"></div>
 <aside id="insp"><h2>屬性</h2><div id="inspBody"></div></aside>
 
@@ -756,16 +762,19 @@ function* rebuildG(my){
 function showBusy(sec,stage){
   const t=document.getElementById('busyTxt');
   if(!t)return;
-  t.textContent='計算中'+(stage?`（${stage}）`:'')+(sec>=1?` ${sec|0} 秒`:'');
+  t.textContent=(stage||'計算中')+(sec>=1?` ${sec|0} 秒`:'');
 }
-function rebuild(){
-  if(job)dropJob(job);                      // 上一次還在算就不用算完了
-  const my={cancelled:false,built:null,stage:''};
+/* 分段執行器：重算和匯出共用。makeIt 收到 my（可以寫 my.stage 更新提示文字），
+   回傳一個 generator；每跑 SLICE 毫秒就把主執行緒還給瀏覽器。
+   同時間只跑一件事，新的會把舊的取消掉。 */
+function startJob(makeIt,label,onDone){
+  if(job)dropJob(job);
+  const my={cancelled:false,built:null,stage:label||'計算中'};
   job=my;
   const t0=performance.now();
   const busy=document.getElementById('busy');
-  showBusy(0,'');busy.style.display='flex';
-  const it=rebuildG(my);
+  showBusy(0,my.stage);busy.style.display='flex';
+  const it=makeIt(my);
   const step=()=>{
     if(my.cancelled)return;
     const ts=performance.now();
@@ -777,7 +786,7 @@ function rebuild(){
     }
     if(r.done){
       job=null;busy.style.display='none';
-      updateGauge(r.value,performance.now()-t0);
+      onDone(r.value,performance.now()-t0);
       return;
     }
     showBusy((performance.now()-t0)/1000,my.stage);
@@ -785,12 +794,15 @@ function rebuild(){
   };
   soon(step);
 }
-function cancelRebuild(){
+function rebuild(){
+  startJob(my=>rebuildG(my),'計算中',(tris,ms)=>updateGauge(tris,ms));
+}
+function cancelJob(){
   if(!job)return;
   dropJob(job);job=null;
   document.getElementById('busy').style.display='none';
   const note=document.getElementById('gNote');
-  note.textContent='已取消計算，畫面還是上一次的結果';
+  note.textContent='已取消，畫面還是上一次的結果';
   note.style.display='block';
 }
 function selectedMeshes(){return meshes.filter(m=>selected.includes(m.userData.id));}
@@ -1170,6 +1182,29 @@ function nodeLabel(n){
   if(n.kind==='mesh')return '匯入';
   return {box:'方塊',cylinder:'圓柱',sphere:'球'}[n.shape];
 }
+/* 面數＝這個東西自己帶進來多少三角形。它是重算成本的來源
+   （成本看的是「有多少面參與布林運算」，不是場上總面數），
+   所以直接標在物件樹上，哪個是重的一眼就看得到。
+   形狀的單位幾何固定，算過一次就記起來，不必每次畫樹都重算。 */
+const SHAPE_FACES={};
+function shapeFaces(shape){
+  if(SHAPE_FACES[shape]==null){
+    const g=baseGeo(shape).toNonIndexed();
+    SHAPE_FACES[shape]=g.getAttribute('position').count/3;
+    g.dispose();
+  }
+  return SHAPE_FACES[shape];
+}
+function faceCount(n){
+  if(n.kind==='mesh')return n.tri.length/9;
+  if(n.kind==='shape')return shapeFaces(n.shape);
+  let sum=0;
+  for(const c of n.children||[])sum+=faceCount(c);
+  return sum;
+}
+function faceText(v){
+  return v>=10000?(v/1000).toFixed(0)+'k':v>=1000?(v/1000).toFixed(1)+'k':String(v|0);
+}
 function drawTree(){
   const host=document.getElementById('treeBody');
   if(!roots.length){host.innerHTML='<div class="empty">還沒有東西。上面加一個形狀。</div>';return;}
@@ -1182,6 +1217,7 @@ function drawTree(){
             <span class="dot" style="background:${col}"></span>
             <span>${nodeLabel(n)} #${n.id}</span>
             <span class="rl">${n.role==='hole'?'孔洞':''}</span>
+            <span class="fc">${faceText(faceCount(n))} 面</span>
           </div>`;
       if(n.kind==='group')h+=`<div class="kids">${render(n.children,rid)}</div>`;
     }
@@ -1608,50 +1644,51 @@ document.getElementById('fileStl').onchange=e=>{
   e.target.value='';
 };
 
-/* ---- 匯出 OBJ：保留物件分組，跨軟體用 ---- */
-document.getElementById('btnObj').onclick=()=>{
-  const lines=['# 加減法建模器匯出','# 單位：mm'];
-  let base=1,count=0;
-  for(const n of roots){
-    if(n.role!=='solid')continue;
-    let polys;
-    try{ polys=evalNode(n); }catch(err){ continue; }
-    // 同一層的孔洞在 evalNode 裡已處理，這裡再減掉最上層的孔洞
-    for(const h of roots){
-      if(h.role!=='hole'||!polys.length)continue;
-      polys=csg(polys,evalNode(h),'subtract');
-    }
-    if(!polys.length)continue;
-    const g=polysToGeo(polys),p=g.attributes.position,nr=g.attributes.normal;
-    lines.push(`o ${n.name||nodeLabel(n)+'_'+n.id}`);
-    for(let i=0;i<p.count;i++)
-      lines.push(`v ${p.getX(i).toFixed(6)} ${(-p.getZ(i)).toFixed(6)} ${p.getY(i).toFixed(6)}`);
-    for(let i=0;i<p.count;i+=3)
-      lines.push(`vn ${nr.getX(i).toFixed(6)} ${(-nr.getZ(i)).toFixed(6)} ${nr.getY(i).toFixed(6)}`);
-    for(let i=0;i<p.count;i+=3){
-      const a=base+i,b=base+i+1,c=base+i+2,k=count+i/3+1;
-      lines.push(`f ${a}//${k} ${b}//${k} ${c}//${k}`);
-    }
-    base+=p.count;count+=p.count/3;
+/* ---- 匯出 ----
+   匯出範圍＝有選東西就只匯出選的（可多選），沒選就是全部。
+   範圍內的實體相加、範圍內的孔洞相減——所以想讓某個孔洞生效，
+   要把那個孔洞一起選起來。這樣「選什麼就出什麼」是可預期的。
+
+   匯出也走分段：跟重算共用 startJob，畫面不會凍住、可以取消，
+   大模型也不會再跳「網頁無回應」。 */
+function exportRoots(){
+  const sel=roots.filter(n=>selected.includes(n.id));
+  return sel.length?sel:roots;
+}
+function exportScopeLabel(){
+  const sel=roots.filter(n=>selected.includes(n.id));
+  return sel.length?`選取的 ${sel.length} 個`:'全部';
+}
+function* exportPolysG(my,label){
+  const list=exportRoots();
+  const solids=list.filter(n=>n.role==='solid');
+  const holes=list.filter(n=>n.role==='hole');
+  let acc=null;
+  for(let i=0;i<solids.length;i++){
+    my.stage=`${label}：實體 ${i+1}/${solids.length}`;
+    const p=yield* evalNodeG(solids[i]);
+    acc=acc?yield* csgG(acc,p,'union'):p;
   }
-  if(base===1){alert('沒有可以匯出的實體。');return;}
-  download('model.obj',new Blob([lines.join('\n')+'\n'],{type:'text/plain'}));
-};
+  for(let i=0;i<holes.length&&acc&&acc.length;i++){
+    my.stage=`${label}：孔洞 ${i+1}/${holes.length}`;
+    acc=yield* csgG(acc,yield* evalNodeG(holes[i]),'subtract');
+  }
+  return acc||[];
+}
+const WRITE_CHUNK=40000;     // 寫檔的迴圈也要喘口氣，不然幾十萬面一樣會卡住
 
 /* ---- 匯出 STL（二進位） ---- */
-document.getElementById('btnStl').onclick=()=>{
-  let acc=null;
-  for(const n of roots){if(n.role!=='solid')continue;
-    const p=evalNode(n);acc=acc?csg(acc,p,'union'):p;}
-  if(acc)for(const n of roots){if(n.role!=='hole')continue;
-    if(!acc.length)break;acc=csg(acc,evalNode(n),'subtract');}
-  if(!acc||!acc.length){alert('沒有可以匯出的實體。');return;}
+function* stlG(my){
+  const acc=yield* exportPolysG(my,'匯出 STL');
+  if(!acc.length)return null;
+  my.stage='匯出 STL：寫檔';
   const g=polysToGeo(acc),pos=g.attributes.position,nor=g.attributes.normal;
   const tri=pos.count/3;
   const buf=new ArrayBuffer(84+tri*50),dv=new DataView(buf);
   dv.setUint32(80,tri,true);
   let o=84;
   for(let i=0;i<pos.count;i+=3){
+    if(i%WRITE_CHUNK===0)yield;
     dv.setFloat32(o,nor.getX(i),true);dv.setFloat32(o+4,nor.getY(i),true);dv.setFloat32(o+8,nor.getZ(i),true);o+=12;
     for(let k=0;k<3;k++){
       // 匯出時轉成 Z 軸朝上，符合 3D 列印慣例
@@ -1661,7 +1698,62 @@ document.getElementById('btnStl').onclick=()=>{
     }
     dv.setUint16(o,0,true);o+=2;
   }
-  download('model.stl',new Blob([buf],{type:'application/octet-stream'}));
+  g.dispose();
+  return new Blob([buf],{type:'application/octet-stream'});
+}
+document.getElementById('btnStl').onclick=()=>{
+  startJob(my=>stlG(my),`匯出 STL（${exportScopeLabel()}）`,blob=>{
+    if(!blob){alert('沒有可以匯出的實體。');return;}
+    download('model.stl',blob);
+  });
+};
+
+/* ---- 匯出 OBJ：保留物件分組，跨軟體用 ---- */
+function* objG(my){
+  const lines=['# 加減法建模器匯出','# 單位：mm'];
+  const list=exportRoots();
+  const solids=list.filter(n=>n.role==='solid');
+  const holes=list.filter(n=>n.role==='hole');
+  let base=1,count=0;
+  for(let si=0;si<solids.length;si++){
+    const n=solids[si];
+    my.stage=`匯出 OBJ：${si+1}/${solids.length}`;
+    let polys;
+    try{ polys=yield* evalNodeG(n); }catch(err){ console.warn(err); continue; }
+    // 同一層的孔洞在 evalNode 裡已處理，這裡再減掉最上層的孔洞
+    for(const h of holes){
+      if(!polys.length)break;
+      polys=yield* csgG(polys,yield* evalNodeG(h),'subtract');
+    }
+    if(!polys.length)continue;
+    const g=polysToGeo(polys),p=g.attributes.position,nr=g.attributes.normal;
+    lines.push(`o ${n.name||nodeLabel(n)+'_'+n.id}`);
+    for(let i=0;i<p.count;i++){
+      if(i%WRITE_CHUNK===0)yield;
+      lines.push(`v ${p.getX(i).toFixed(6)} ${(-p.getZ(i)).toFixed(6)} ${p.getY(i).toFixed(6)}`);
+    }
+    for(let i=0;i<p.count;i+=3){
+      if(i%WRITE_CHUNK===0)yield;
+      lines.push(`vn ${nr.getX(i).toFixed(6)} ${(-nr.getZ(i)).toFixed(6)} ${nr.getY(i).toFixed(6)}`);
+    }
+    for(let i=0;i<p.count;i+=3){
+      if(i%WRITE_CHUNK===0)yield;
+      const a=base+i,b=base+i+1,c=base+i+2,k=count+i/3+1;
+      lines.push(`f ${a}//${k} ${b}//${k} ${c}//${k}`);
+    }
+    base+=p.count;count+=p.count/3;
+    g.dispose();
+  }
+  if(base===1)return null;
+  my.stage='匯出 OBJ：寫檔';
+  yield;
+  return new Blob([lines.join('\n')+'\n'],{type:'text/plain'});
+}
+document.getElementById('btnObj').onclick=()=>{
+  startJob(my=>objG(my),`匯出 OBJ（${exportScopeLabel()}）`,blob=>{
+    if(!blob){alert('沒有可以匯出的實體。');return;}
+    download('model.obj',blob);
+  });
 };
 
 /* ---- 起手式：先試著接續上次，沒有的話給一個範例 ---- */
@@ -1671,7 +1763,7 @@ document.getElementById('btnStl').onclick=()=>{
   const c=makeShape('cylinder');c.size=[14,40,14];c.pos=[0,12,0];c.role='hole';
   roots=[b,c];selected=[];
 })();
-document.getElementById('busyStop').onclick=cancelRebuild;
+document.getElementById('busyStop').onclick=cancelJob;
 resize();updateCam();rebuild();
 (function loop(){requestAnimationFrame(loop);renderer.render(scene,camera);})();
 </script>
