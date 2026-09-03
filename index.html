@@ -265,44 +265,84 @@ class Poly {
   clone(){return new Poly(this.vertices.map(v=>v.clone()),this.plane.clone());}
   flip(){this.vertices.reverse();this.plane.flip();}
 }
+/* BSP 樹的走訪一律用自己的堆疊迭代，不用函式遞迴。
+   遞迴版本在面數一多（實測 7200 面）就會把瀏覽器的呼叫堆疊塞爆，
+   跳 Maximum call stack size exceeded，整個算不出來。改成自己維護
+   待辦清單之後，樹再深都只是慢，不會失敗。
+   走訪順序刻意跟原本的遞迴一致（先前面後後面），這樣切出來的
+   多邊形順序不變，後續選分割面的結果才跟以前一模一樣。 */
 class Bsp {
   constructor(polys){this.plane=null;this.front=null;this.back=null;this.polygons=[];if(polys)this.build(polys);}
-  clone(){const n=new Bsp();n.plane=this.plane&&this.plane.clone();
-    n.front=this.front&&this.front.clone();n.back=this.back&&this.back.clone();
-    n.polygons=this.polygons.map(p=>p.clone());return n;}
+  clone(){
+    const root=new Bsp();
+    const stack=[[this,root]];
+    while(stack.length){
+      const [s,d]=stack.pop();
+      d.plane=s.plane&&s.plane.clone();
+      d.polygons=s.polygons.map(p=>p.clone());
+      if(s.front){d.front=new Bsp();stack.push([s.front,d.front]);}
+      if(s.back){d.back=new Bsp();stack.push([s.back,d.back]);}
+    }
+    return root;
+  }
   invert(){
-    for(const p of this.polygons)p.flip();
-    if(this.plane)this.plane.flip();
-    if(this.front)this.front.invert();
-    if(this.back)this.back.invert();
-    const t=this.front;this.front=this.back;this.back=t;
+    const stack=[this];
+    while(stack.length){
+      const n=stack.pop();
+      for(const p of n.polygons)p.flip();
+      if(n.plane)n.plane.flip();
+      const t=n.front;n.front=n.back;n.back=t;
+      if(n.front)stack.push(n.front);
+      if(n.back)stack.push(n.back);
+    }
   }
   clipPolygons(polys){
-    if(!this.plane)return polys.slice();
-    let front=[],back=[];
-    for(const p of polys)this.plane.splitPolygon(p,front,back,front,back);
-    if(this.front)front=this.front.clipPolygons(front); 
-    back=this.back?this.back.clipPolygons(back):[];
-    return front.concat(back);
+    const out=[];
+    const stack=[[this,polys]];
+    while(stack.length){
+      const [n,ps]=stack.pop();
+      if(!n.plane){for(const p of ps)out.push(p);continue;}
+      const front=[],back=[];
+      for(const p of ps)n.plane.splitPolygon(p,front,back,front,back);
+      /* 先推後面再推前面，pop 出來就是前面先走，跟遞迴版順序相同 */
+      if(n.back)stack.push([n.back,back]);
+      if(n.front)stack.push([n.front,front]);
+      else for(const p of front)out.push(p);
+    }
+    return out;
   }
   clipTo(bsp){
-    this.polygons=bsp.clipPolygons(this.polygons);
-    if(this.front)this.front.clipTo(bsp);
-    if(this.back)this.back.clipTo(bsp);
+    const stack=[this];
+    while(stack.length){
+      const n=stack.pop();
+      n.polygons=bsp.clipPolygons(n.polygons);
+      if(n.front)stack.push(n.front);
+      if(n.back)stack.push(n.back);
+    }
   }
   allPolygons(){
-    let r=this.polygons.slice();
-    if(this.front)r=r.concat(this.front.allPolygons());
-    if(this.back)r=r.concat(this.back.allPolygons());
-    return r;
+    const out=[];
+    const stack=[this];
+    while(stack.length){
+      const n=stack.pop();
+      for(const p of n.polygons)out.push(p);
+      if(n.back)stack.push(n.back);
+      if(n.front)stack.push(n.front);
+    }
+    return out;
   }
   build(polys){
     if(!polys.length)return;
-    if(!this.plane)this.plane=polys[0].plane.clone();
-    const front=[],back=[];
-    for(const p of polys)this.plane.splitPolygon(p,this.polygons,this.polygons,front,back);
-    if(front.length){if(!this.front)this.front=new Bsp();this.front.build(front);}
-    if(back.length){if(!this.back)this.back=new Bsp();this.back.build(back);}
+    const stack=[[this,polys]];
+    while(stack.length){
+      const [n,ps]=stack.pop();
+      if(!ps.length)continue;
+      if(!n.plane)n.plane=ps[0].plane.clone();
+      const front=[],back=[];
+      for(const p of ps)n.plane.splitPolygon(p,n.polygons,n.polygons,front,back);
+      if(back.length){if(!n.back)n.back=new Bsp();stack.push([n.back,back]);}
+      if(front.length){if(!n.front)n.front=new Bsp();stack.push([n.front,front]);}
+    }
   }
 }
 function csg(pa,pb,op){
@@ -1256,11 +1296,13 @@ document.getElementById('filePlace').onchange=e=>{
    進來的三角形會被搬到原點、塞進 1×1×1 的方框，實際尺寸記在 size 裡，
    所以它在樹上跟方塊圓柱是同一種東西：可以搬、可以縮放、可以切成孔洞。
    面數是布林運算的成本來源，所以匯入時就先把關。 */
-/* 這兩個數字是實測出來的，不是猜的：
-   在方塊上挖一個匯入的球，3200 面約 1.3 秒還能用，7200 面時 BSP 遞迴就會
-   爆堆疊（Maximum call stack size exceeded），結果整個算不出來。
-   等 BSP 改成非遞迴之後，這裡才有本錢往上調。 */
-const STL_SOFT=2000, STL_HARD=5000;
+/* 這兩個數字是實測出來的，不是猜的。
+   BSP 改成非遞迴迭代之後，爆堆疊那道牆沒了，剩下的純粹是時間：
+   在方塊上挖一個匯入的球，3600 面約 0.5 秒、8100 面約 4 秒、
+   14400 面約 12 秒，25600 面要一分鐘——那已經不能用了。
+   所以門檻改成「會頓就先問、久到不能用就擋」。
+   再要往上，下一步是減面（decimation），不是再調大這兩個數字。 */
+const STL_SOFT=5000, STL_HARD=15000;
 
 function parseSTL(buf){
   const dv=new DataView(buf);
@@ -1322,13 +1364,13 @@ document.getElementById('fileStl').onchange=e=>{
       const tris=v.length/9;
       if(tris>STL_HARD){
         alert(`這個 STL 有 ${tris.toLocaleString()} 個面，太細了。\n`+
-              `目前一次最多吃 ${STL_HARD.toLocaleString()} 個面，再多布林運算會直接算不出來。\n`+
+              `目前一次最多吃 ${STL_HARD.toLocaleString()} 個面，再多的話每次重算都要等一分鐘以上。\n`+
               `請先用其他軟體減面，或換一個比較簡單的模型。`);
         return;
       }
       if(tris>STL_SOFT&&!confirm(
         `這個 STL 有 ${tris.toLocaleString()} 個面，算是偏重的。\n`+
-        `放進來之後每次移動、縮放放開滑鼠都要重算，可能會頓幾秒。\n`+
+        `放進來之後每次移動、縮放放開滑鼠都要重算，可能會頓好幾秒。\n`+
         `右下角油表會告訴你還剩多少餘裕。\n\n要繼續嗎？`))return;
 
       const {tri,size,height}=normalizeTris(v);
