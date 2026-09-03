@@ -47,6 +47,26 @@
   button:active{background:#374357;}
   button:disabled{opacity:.35;cursor:default;}
   button:focus-visible{outline:2px solid var(--focus);outline-offset:1px;}
+  .menu{position:relative;}
+  .menu>button::after{content:' ▾';color:var(--dim);}
+  .menu.open>button{background:#374357;}
+  .menu .pop{
+    position:absolute;top:calc(100% + 5px);left:0;z-index:20;display:none;
+    min-width:172px;padding:4px;
+    background:var(--panel-2);border:1px solid var(--line);border-radius:6px;
+    box-shadow:0 6px 20px rgba(0,0,0,.45);
+  }
+  .menu.open .pop{display:block;}
+  .menu .pop button{
+    display:block;width:100%;text-align:left;border:none;background:none;
+    border-radius:4px;padding:6px 10px;
+  }
+  .menu .pop button:hover{background:#3c4859;}
+  .menu .pop .head{
+    color:var(--dim);font-size:10px;letter-spacing:.06em;
+    padding:7px 10px 3px;border-top:1px solid var(--line);margin-top:3px;
+  }
+  .menu .pop .head:first-child{border-top:none;margin-top:0;}
   .title{font-weight:600;letter-spacing:.02em;margin-right:8px;}
   .title span{color:var(--dim);font-weight:400;}
   aside{background:var(--panel);overflow-y:auto;}
@@ -136,12 +156,20 @@
   <button id="btnRedo">下一步</button>
   <div class="sep"></div>
   <button id="btnFit">看全部</button>
-  <button id="btnSave">存檔</button>
-  <button id="btnOpen">開啟</button>
-  <button id="btnPlace">插入元件</button>
-  <button id="btnImportStl">匯入 STL</button>
-  <button id="btnObj">匯出 OBJ</button>
-  <button id="btnStl">匯出 STL</button>
+  <div class="menu" id="fileMenu">
+    <button id="btnFile">檔案</button>
+    <div class="pop">
+      <div class="head">這個模型</div>
+      <button id="btnSave">存檔</button>
+      <button id="btnOpen">開啟舊檔</button>
+      <div class="head">放東西進來</div>
+      <button id="btnPlace">插入元件（存檔）</button>
+      <button id="btnImportStl">匯入 STL</button>
+      <div class="head">送出去列印／給別的軟體</div>
+      <button id="btnStl">匯出 STL</button>
+      <button id="btnObj">匯出 OBJ</button>
+    </div>
+  </div>
   <input type="file" id="fileIn" accept=".json,.csg" style="display:none">
   <input type="file" id="filePlace" accept=".json,.csg" style="display:none">
   <input type="file" id="fileStl" accept=".stl" style="display:none">
@@ -1057,6 +1085,18 @@ addEventListener('keydown',e=>{
   if(k==='h'&&selected.length===1){const n=findNode(selected[0]);
     pushUndo();n.role=n.role==='hole'?'solid':'hole';rebuild();}
 });
+
+/* ---- 檔案選單：點開、點裡面任何一項或點外面都會收起來 ---- */
+(function(){
+  const menu=document.getElementById('fileMenu');
+  const close=()=>menu.classList.remove('open');
+  document.getElementById('btnFile').onclick=e=>{
+    e.stopPropagation();menu.classList.toggle('open');
+  };
+  menu.querySelector('.pop').addEventListener('click',close);
+  addEventListener('pointerdown',e=>{if(!menu.contains(e.target))close();});
+  addEventListener('keydown',e=>{if(e.key==='Escape')close();});
+})();
 
 /* ---- 存檔 / 開啟：存的是那棵樹，不是三角形 ---- */
 function download(name,blob){
