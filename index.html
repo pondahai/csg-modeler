@@ -93,6 +93,10 @@
     box-shadow:0 2px 10px rgba(0,0,0,.45);
   }
   #dim span{font-weight:400;opacity:.7;}
+  #marquee{
+    position:absolute;display:none;pointer-events:none;z-index:6;
+    border:1px solid #3b7fd4;background:rgba(59,127,212,.14);
+  }
   #gauge{
     position:absolute;right:12px;bottom:12px;width:186px;
     background:rgba(255,252,244,.92);border:1px solid #cfc6ae;border-radius:5px;
@@ -144,7 +148,7 @@
 </div>
 
 <aside id="tree"><h2>物件樹</h2><div id="treeBody"></div></aside>
-<div id="view"><div id="busy">計算中</div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="note" id="gNote"></div></div><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝轉視角　右鍵拖＝平移</div></div>
+<div id="view"><div id="busy">計算中</div><div id="marquee"></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="note" id="gNote"></div></div><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>中鍵拖＝轉視角（沒有中鍵就按住 Alt 拖）　右鍵拖＝平移</div></div>
 <div id="dim"></div>
 <aside id="insp"><h2>屬性</h2><div id="inspBody"></div></aside>
 
@@ -562,12 +566,62 @@ function hitVertical(at){
   const p=new THREE.Plane(n,-n.dot(at));
   return ray.ray.intersectPlane(p,new THREE.Vector3());
 }
+/* ---- 框選 ----
+   概念：拖出來的矩形沿著目前視角往裡面無限延伸，像一支方形手電筒。
+   照到的東西全選，不管遠近、也不管有沒有被別的東西擋住。
+   所以判定整個在螢幕座標上做：把物件的包圍盒投影成一個矩形，
+   跟拖出來的矩形比有沒有重疊。 */
+function drawMarquee(x,y){
+  const r=renderer.domElement.getBoundingClientRect();
+  const el=document.getElementById('marquee');
+  el.style.display='block';
+  el.style.left=(Math.min(start.x,x)-r.left)+'px';
+  el.style.top=(Math.min(start.y,y)-r.top)+'px';
+  el.style.width=Math.abs(x-start.x)+'px';
+  el.style.height=Math.abs(y-start.y)+'px';
+}
+// 把一個 mesh 的包圍盒投影到螢幕上，回傳它佔的矩形（整個在鏡頭後面就回傳 null）
+function screenRectOf(m){
+  m.geometry.computeBoundingBox();
+  const bb=m.geometry.boundingBox;
+  if(!bb)return null;
+  const r=renderer.domElement.getBoundingClientRect();
+  let x0=1/0,y0=1/0,x1=-1/0,y1=-1/0,front=false;
+  const v=new THREE.Vector3();
+  for(let i=0;i<8;i++){
+    v.set(i&1?bb.max.x:bb.min.x, i&2?bb.max.y:bb.min.y, i&4?bb.max.z:bb.min.z);
+    v.applyMatrix4(m.matrixWorld).applyMatrix4(camera.matrixWorldInverse);
+    if(v.z>-.01)continue;                 // 這個角落在鏡頭後面，跳過
+    front=true;
+    v.applyMatrix4(camera.projectionMatrix);
+    const sx=r.left+(v.x*.5+.5)*r.width, sy=r.top+(-v.y*.5+.5)*r.height;
+    if(sx<x0)x0=sx; if(sx>x1)x1=sx;
+    if(sy<y0)y0=sy; if(sy>y1)y1=sy;
+  }
+  return front?{x0,y0,x1,y1}:null;
+}
+function applyMarquee(x,y){
+  const a={x0:Math.min(start.x,x),y0:Math.min(start.y,y),
+           x1:Math.max(start.x,x),y1:Math.max(start.y,y)};
+  const hit=[];
+  if(a.x1-a.x0>=3||a.y1-a.y0>=3){
+    for(const m of meshes){
+      const b=screenRectOf(m);
+      if(!b)continue;
+      if(b.x0<=a.x1&&b.x1>=a.x0&&b.y0<=a.y1&&b.y1>=a.y0)hit.push(m.userData.id);
+    }
+  }
+  selected = start.add ? start.base.concat(hit.filter(id=>!start.base.includes(id))) : hit;
+  updateHandles();
+}
+
 renderer.domElement.addEventListener('contextmenu',e=>e.preventDefault());
 renderer.domElement.addEventListener('pointerdown',e=>{
   renderer.domElement.setPointerCapture(e.pointerId);
   setPtr(e);
-  if(e.button===2||e.shiftKey&&e.button===1){mode='pan';start={x:e.clientX,y:e.clientY};return;}
-  if(e.button===1){mode='pan';start={x:e.clientX,y:e.clientY};return;}
+  // 中鍵拖＝轉視角。筆電觸控板常常沒有中鍵，所以 Alt＋左鍵也是轉視角。
+  if(e.button===1||(e.button===0&&e.altKey)){mode='orbit';start={x:e.clientX,y:e.clientY};return;}
+  if(e.button===2){mode='pan';start={x:e.clientX,y:e.clientY};return;}
 
   const hh=ray.intersectObjects([yHandle,...handles,...rings].filter(o=>o.visible));
   if(hh.length){
@@ -613,8 +667,11 @@ renderer.domElement.addEventListener('pointerdown',e=>{
     mode='move';start={p:hitPlane(hits[0].point.y),y:hits[0].point.y};
     return;
   }
-  if(!e.shiftKey){selected=[];drawTree();drawInspector();updateHandles();}
-  mode='orbit';start={x:e.clientX,y:e.clientY};
+  // 空白處拖＝框選。框出來的矩形沿著目前視角無限延伸出去，
+  // 所以遠近、被不被擋住都不影響，只看投影有沒有重疊。
+  mode='marquee';
+  start={x:e.clientX,y:e.clientY,add:e.shiftKey,base:selected.slice()};
+  drawMarquee(e.clientX,e.clientY);
 });
 addEventListener('pointermove',e=>{
   if(!mode)return;
@@ -623,6 +680,11 @@ addEventListener('pointermove',e=>{
     sph.theta-=(e.clientX-start.x)*.006;
     sph.phi=Math.max(.05,Math.min(Math.PI-.05,sph.phi-(e.clientY-start.y)*.006));
     start={x:e.clientX,y:e.clientY};updateCam();return;
+  }
+  if(mode==='marquee'){
+    drawMarquee(e.clientX,e.clientY);
+    applyMarquee(e.clientX,e.clientY);   // 一邊拖一邊就看得到選到誰
+    return;
   }
   if(mode==='pan'){
     const f=sph.r*.0016;
@@ -735,7 +797,13 @@ function liveScale(F,anchor){
   if(any){boxHelper.box.copy(b);placeHandles(b);showDim(b);}
   drawInspector();
 }
-addEventListener('pointerup',()=>{
+addEventListener('pointerup',e=>{
+  if(mode==='marquee'){
+    // 沒拖就是在空白處點一下＝清空選取（applyMarquee 會處理成「沒框到任何東西」）
+    applyMarquee(e.clientX,e.clientY);
+    document.getElementById('marquee').style.display='none';
+    drawTree();drawInspector();updateHandles();
+  }
   if(mode==='move'||mode==='moveY'||mode==='scaleH'||mode==='rotate'){
     for(const m of meshes){m.position.set(0,0,0);m.scale.set(1,1,1);m.quaternion.identity();}
     hideDim();rebuild();
