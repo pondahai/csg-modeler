@@ -119,8 +119,11 @@
   <button id="btnFit">看全部</button>
   <button id="btnSave">存檔</button>
   <button id="btnOpen">開啟</button>
+  <button id="btnPlace">插入元件</button>
+  <button id="btnObj">匯出 OBJ</button>
   <button id="btnStl">匯出 STL</button>
   <input type="file" id="fileIn" accept=".json,.csg" style="display:none">
+  <input type="file" id="filePlace" accept=".json,.csg" style="display:none">
 </div>
 
 <aside id="tree"><h2>物件樹</h2><div id="treeBody"></div></aside>
@@ -714,6 +717,7 @@ renderer.domElement.addEventListener('wheel',e=>{
    5. 面板
    ============================================================ */
 function nodeLabel(n){
+  if(n.name)return n.name;
   if(n.kind==='group')return '組合';
   return {box:'方塊',cylinder:'圓柱',sphere:'球'}[n.shape];
 }
@@ -782,6 +786,11 @@ function drawInspector(){
   const num=(lbl,val,path,i)=>`<div class="row"><label>${lbl}</label>
     <input type="number" step="1" value="${val}" data-p="${path}" data-i="${i}"></div>`;
   host.innerHTML=`
+    <div class="row" style="margin-bottom:10px">
+      <input type="text" id="nm" placeholder="元件名稱（選填）" value="${n.name||''}"
+        style="width:100%;font:inherit;color:var(--text);background:var(--ink);
+               border:1px solid var(--line);border-radius:4px;padding:4px 6px">
+    </div>
     <div class="seg">
       <button data-role="solid" class="${n.role==='solid'?'on':''}">實體</button>
       <button data-role="hole" class="${n.role==='hole'?'on hole':''}">孔洞</button>
@@ -802,6 +811,11 @@ function drawInspector(){
       if(inp.dataset.p==='size')v=Math.max(.5,v);
       n[inp.dataset.p][+inp.dataset.i]=v;rebuild();};
   });
+  const nm=document.getElementById('nm');
+  if(nm)nm.onchange=()=>{pushUndo();
+    const v=nm.value.trim();
+    if(v)n.name=v;else delete n.name;
+    drawTree();};
   host.querySelectorAll('[data-role]').forEach(b=>b.onclick=()=>{
     pushUndo();n.role=b.dataset.role;rebuild();});
   const col=document.getElementById('col');
@@ -933,6 +947,75 @@ function autoload(){
     roots=d.roots;uid=d.uid;return true;
   }catch(e){return false;}
 }
+
+/* ---- 插入元件：把另一個存檔整棵樹當成一個組合放進來 ---- */
+function renumber(n){
+  n.id=uid++;
+  if(n.children)n.children.forEach(renumber);
+}
+document.getElementById('btnPlace').onclick=()=>document.getElementById('filePlace').click();
+document.getElementById('filePlace').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const d=JSON.parse(r.result);
+      if(!Array.isArray(d.roots)||!d.roots.length)throw new Error('這個檔案裡沒有東西');
+      pushUndo();
+      const kids=JSON.parse(JSON.stringify(d.roots));
+      kids.forEach(renumber);
+      // 包成一層組合，之後可以整個搬動，也可以拆開繼續改
+      const g={id:uid++,kind:'group',role:'solid',
+               pos:[0,0,0],rot:[0,0,0],size:[1,1,1],
+               name:f.name.replace(/\.(json|csg)$/i,''),
+               children:kids};
+      roots.push(g);selected=[g.id];rebuild();
+      // 放到目前所有東西的旁邊，避免疊在一起
+      const b=selBox();
+      if(b){
+        let far=0;
+        for(const m of meshes){
+          if(m.userData.id===g.id)continue;
+          m.geometry.computeBoundingBox();
+          far=Math.max(far,m.geometry.boundingBox.max.x);
+        }
+        if(far>b.min.x){g.pos[0]=Math.round(far-b.min.x+10);rebuild();}
+      }
+    }catch(err){alert('這個檔案讀不進來：'+err.message);}
+  };
+  r.readAsText(f);
+  e.target.value='';
+};
+
+/* ---- 匯出 OBJ：保留物件分組，跨軟體用 ---- */
+document.getElementById('btnObj').onclick=()=>{
+  const lines=['# 加減法建模器匯出','# 單位：mm'];
+  let base=1,count=0;
+  for(const n of roots){
+    if(n.role!=='solid')continue;
+    let polys;
+    try{ polys=evalNode(n); }catch(err){ continue; }
+    // 同一層的孔洞在 evalNode 裡已處理，這裡再減掉最上層的孔洞
+    for(const h of roots){
+      if(h.role!=='hole'||!polys.length)continue;
+      polys=csg(polys,evalNode(h),'subtract');
+    }
+    if(!polys.length)continue;
+    const g=polysToGeo(polys),p=g.attributes.position,nr=g.attributes.normal;
+    lines.push(`o ${n.name||nodeLabel(n)+'_'+n.id}`);
+    for(let i=0;i<p.count;i++)
+      lines.push(`v ${p.getX(i).toFixed(6)} ${(-p.getZ(i)).toFixed(6)} ${p.getY(i).toFixed(6)}`);
+    for(let i=0;i<p.count;i+=3)
+      lines.push(`vn ${nr.getX(i).toFixed(6)} ${(-nr.getZ(i)).toFixed(6)} ${nr.getY(i).toFixed(6)}`);
+    for(let i=0;i<p.count;i+=3){
+      const a=base+i,b=base+i+1,c=base+i+2,k=count+i/3+1;
+      lines.push(`f ${a}//${k} ${b}//${k} ${c}//${k}`);
+    }
+    base+=p.count;count+=p.count/3;
+  }
+  if(base===1){alert('沒有可以匯出的實體。');return;}
+  download('model.obj',new Blob([lines.join('\n')+'\n'],{type:'text/plain'}));
+};
 
 /* ---- 匯出 STL（二進位） ---- */
 document.getElementById('btnStl').onclick=()=>{
