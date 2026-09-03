@@ -333,6 +333,32 @@ function matrixOf(n){
   m.compose(new THREE.Vector3(...n.pos),q,new THREE.Vector3(...n.size));
   return m;
 }
+/* 世界的某一根軸，對應到這個物件自己的哪一根軸？
+   size 記的是物件「旋轉之前」的長寬高，但縮放是在世界座標上量的。
+   沒轉的時候兩者剛好對得起來，一轉 90 度就會套錯格子（拉左右卻變高矮）。
+   這裡用旋轉矩陣把兩邊對起來：回傳 map[世界軸] = 自身軸。
+   斜著轉（不是 90 度的倍數）沒有精確答案，取最接近的那根。 */
+function axisMap(n){
+  const m=new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(
+    THREE.MathUtils.degToRad(n.rot[0]),
+    THREE.MathUtils.degToRad(n.rot[1]),
+    THREE.MathUtils.degToRad(n.rot[2]),'XYZ'));
+  const e=m.elements;
+  const map=[-1,-1,-1], usedLocal=[false,false,false], usedWorld=[false,false,false];
+  for(let pass=0;pass<3;pass++){
+    let best=-1,bw=0,bl=0;
+    for(let w=0;w<3;w++){
+      if(usedWorld[w])continue;
+      for(let l=0;l<3;l++){
+        if(usedLocal[l])continue;
+        const v=Math.abs(e[l*4+w]);      // 自身軸 l 在世界軸 w 上的分量
+        if(v>best){best=v;bw=w;bl=l;}
+      }
+    }
+    map[bw]=bl; usedWorld[bw]=true; usedLocal[bl]=true;
+  }
+  return map;
+}
 // 回傳「已套用自身變換」的多邊形，也就是位於父層座標系
 function evalNode(n){
   let polys;
@@ -758,9 +784,11 @@ addEventListener('pointermove',e=>{
     const anchor=[start.ax,start.ay,start.az],F=[fx,fy,fz];
     selected.forEach((id,i)=>{
       const n=findNode(id),s0=startState[i];
+      const map=axisMap(s0);            // 世界軸 → 這個物件自己的軸
       for(let k=0;k<3;k++){
         if(F[k]===1)continue;
-        n.size[k]=Math.max(.5,Math.round(s0.size[k]*F[k]*10)/10);
+        const j=map[k];                 // 倍率要套在自身的第 j 格，不是第 k 格
+        n.size[j]=Math.max(.5,Math.round(s0.size[j]*F[k]*10)/10);
         n.pos[k]=Math.round((anchor[k]+(s0.pos[k]-anchor[k])*F[k])*10)/10;
       }
     });
