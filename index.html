@@ -77,6 +77,23 @@
   }
   #treeBody{flex:1;overflow-y:auto;min-height:0;}
   #insp{grid-area:insp;border-left:1px solid var(--line);padding:10px;}
+  /* 元件選單：一張畫布墊在底下畫 3D，上面疊透明的按鈕負責文字和點擊 */
+  #palette{position:relative;display:grid;grid-template-columns:repeat(3,1fr);gap:5px;}
+  #palCv{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+  button.pal{
+    position:relative;height:70px;padding:0 0 4px;
+    display:flex;align-items:flex-end;justify-content:center;
+    background:transparent;border:1px solid var(--line);border-radius:5px;
+    font-size:10px;letter-spacing:.02em;
+  }
+  /* 文字要壓在 3D 上面，所以給它一塊底，不然淺色的形狀後面會看不清楚 */
+  button.pal span{
+    background:rgba(24,29,38,.72);color:#cfd6e2;
+    padding:1px 5px;border-radius:3px;
+  }
+  button.pal:hover{background:rgba(255,255,255,.05);border-color:var(--focus);}
+  button.pal:hover span{color:#fff;}
+  button.pal:active{background:rgba(255,255,255,.12);}
   #view{grid-area:view;position:relative;}
   /* 收起側邊面板：整欄寬度收成 0，畫面自己補上去 */
   body.noTree{grid-template-columns:0 1fr 232px;}
@@ -195,10 +212,6 @@
 
 <div id="bar">
   <div class="title">加減法建模器 <span>CSG</span></div>
-  <button id="addBox">方塊</button>
-  <button id="addCyl">圓柱</button>
-  <button id="addSph">球</button>
-  <div class="sep"></div>
   <button id="btnGroup">組合</button>
   <button id="btnUngroup">拆開</button>
   <button id="btnDup">複製</button>
@@ -252,7 +265,7 @@
 </div>
 <div id="svgWait">正在把圖形變成立體…<br><span>描圖來的圖案線條很多，可能要等幾秒</span></div>
 </div>
-<aside id="insp"><h2>屬性</h2><div id="inspBody"></div></aside>
+<aside id="insp"><h2>基本元件</h2><div id="palette"></div><div class="grp"><h2>屬性</h2></div><div id="inspBody"></div></aside>
 
 <script>
 /* ============================================================
@@ -511,11 +524,17 @@ let selected=[];       // 選取的最上層物件 id
 let undoStack=[], redoStack=[];
 
 // 每種形狀有自己的固定顏色，一眼認得出誰是誰
-const SHAPE_COLOR={box:'#5b8dd6',cylinder:'#e0a83c',sphere:'#6fb98f',mesh:'#b07ad6'};
-function makeShape(shape){
-  const size=[20,20,20];
-  return {id:uid++,kind:'shape',shape,role:'solid',
-          pos:[0,size[1]/2,0],rot:[0,0,0],size,color:SHAPE_COLOR[shape]};
+const SHAPE_COLOR={box:'#5b8dd6',cylinder:'#e0a83c',cone:'#e08a3c',
+                   sphere:'#6fb98f',dome:'#5fae9c',wedge:'#c9705f',hex:'#8f9bd6',
+                   mesh:'#b07ad6'};
+// 預設尺寸：多數形狀用 20mm 的立方框，半球扁一點才像半球
+const SHAPE_SIZE={dome:[20,10,20]};
+function makeShape(shape,r){
+  const size=(SHAPE_SIZE[shape]||[20,20,20]).slice();
+  const n={id:uid++,kind:'shape',shape,role:'solid',
+           pos:[0,size[1]/2,0],rot:[0,0,0],size,color:SHAPE_COLOR[shape]};
+  if(shape==='box'&&r>0)n.r=r;   // 圓角半徑，單位是真實的 mm；沒有就是直角
+  return n;
 }
 function findNode(id,list=roots){
   for(const n of list){
@@ -524,10 +543,67 @@ function findNode(id,list=roots){
   }
   return null;
 }
-function baseGeo(shape){
-  if(shape==='box')return new THREE.BoxGeometry(1,1,1);
-  if(shape==='cylinder')return new THREE.CylinderGeometry(.5,.5,1,48);
-  return new THREE.SphereGeometry(.5,32,20);
+/* 單位幾何：以原點為中心、剛好塞滿 1×1×1 的方框，實際尺寸一律靠 size 縮放。
+   新增形狀時請維持這個前提（包圍盒、把手定位、縮放那一整套都靠它）。
+
+   圓角方塊是唯一的例外：圓角半徑是「真實的毫米」，不能跟著 size 一起被拉扁
+   （方塊拉成 40×5×40 時，圓角還是要圓的）。所以它用真實尺寸把幾何體做出來，
+   再先除以 size —— 後面照樣乘上 size，剛好還原成真實尺寸。代價是它的幾何體
+   跟著 size 和圓角半徑變，所以這兩個東西一定要進 geoKey（見 kindKey）。 */
+function wedgeGeo(){
+  // 直角三角柱：斜面從右下切到左上
+  const sh=new THREE.Shape();
+  sh.moveTo(-.5,-.5);sh.lineTo(.5,-.5);sh.lineTo(-.5,.5);sh.closePath();
+  const g=new THREE.ExtrudeGeometry(sh,{depth:1,bevelEnabled:false});
+  g.translate(0,0,-.5);
+  return g;
+}
+function domeGeo(){
+  // 用 LatheGeometry 車出來：輪廓兩端都收回中軸，底面自然就封起來了
+  const pts=[new THREE.Vector2(0,-.5)];
+  const N=16;
+  for(let i=N;i>=0;i--){
+    const a=i/N*Math.PI/2;
+    pts.push(new THREE.Vector2(Math.sin(a)*.5, -.5+Math.cos(a)));
+  }
+  return new THREE.LatheGeometry(pts,32);
+}
+function roundedBoxGeo(n){
+  const s=n.size||[1,1,1];
+  const w=Math.abs(s[0])||1, h=Math.abs(s[1])||1, d=Math.abs(s[2])||1;
+  const r=Math.max(.05,Math.min(n.r==null?2:n.r, Math.min(w,h,d)/2-.05));
+  /* 先做一個「內縮 r」的方形核心，再讓擠出的圓弧倒角把它往外長回 r。
+     這等於把核心方塊拿半徑 r 的球滾一圈（數學上的 Minkowski 和），
+     十二條邊和八個角就都是圓的了。
+     注意 three.js 的 bevel 是「往外長」不是「往內縮」：所以核心要先減掉
+     2r，不能直接拿完整尺寸的圓角矩形去倒角，那樣會變成 w+2r 寬。 */
+  const x=w/2-r, z=d/2-r;
+  const sh=new THREE.Shape();
+  sh.moveTo(-x,-z);sh.lineTo(x,-z);sh.lineTo(x,z);sh.lineTo(-x,z);sh.closePath();
+  const g=new THREE.ExtrudeGeometry(sh,{depth:h-2*r,steps:1,curveSegments:1,
+    bevelEnabled:true,bevelThickness:r,bevelSize:r,bevelSegments:5});
+  g.translate(0,0,-(h-2*r)/2);  // 含倒角之後總高剛好是 h，把它移到中心
+  g.rotateX(-Math.PI/2);        // 擠出方向從 Z 轉成 Y（我們的世界是 Y 朝上）
+  g.scale(1/w,1/h,1/d);         // 先除掉，後面 matrixOf 會再乘回來
+  return g;
+}
+// 圓角方塊不是獨立的形狀，就是「圓角半徑 > 0 的方塊」。
+// 半徑 0 的方塊走原本那條 12 個面的快路，一點都沒被拖慢。
+function boxR(n){return (n&&typeof n==='object'&&n.r>0)?n.r:0;}
+/* 有些單位幾何（楔形、圓角方塊走 ExtrudeGeometry）本來就沒有索引，
+   再呼叫一次 toNonIndexed() 只會讓 three.js 印警告，所以先問一下。 */
+function nonIndexed(g){return g.index?(()=>{const t=g.toNonIndexed();g.dispose();return t;})():g;}
+function baseGeo(n){
+  const shape=(typeof n==='string')?n:n.shape;
+  switch(shape){
+    case 'box':      return boxR(n)?roundedBoxGeo(n):new THREE.BoxGeometry(1,1,1);
+    case 'cylinder': return new THREE.CylinderGeometry(.5,.5,1,48);
+    case 'cone':     return new THREE.ConeGeometry(.5,1,48);
+    case 'hex':      return new THREE.CylinderGeometry(.5,.5,1,6);
+    case 'wedge':    return wedgeGeo();
+    case 'dome':     return domeGeo();
+    default:         return new THREE.SphereGeometry(.5,32,20);
+  }
 }
 /* post：轉完之後才套上去的「世界方向拉伸」，預設 [1,1,1]。
    size 是物件自己的長寬高（旋轉之前），post 是貼著世界軸的變形。
@@ -586,7 +662,7 @@ function axisMap(n){
 function* evalNodeG(n){
   let polys;
   if(n.kind==='shape'){
-    const g=baseGeo(n.shape).toNonIndexed();
+    const g=nonIndexed(baseGeo(n));
     g.applyMatrix4(matrixOf(n));
     polys=geoToPolys(g);
     g.dispose();
@@ -751,7 +827,12 @@ const meshes=[];
    代價是幾何體記憶體大約多一倍（379k 面約多 27MB），換掉幾十秒的等待。 */
 const geoCache=new Map();
 function kindKey(n){
-  if(n.kind==='shape')return 's'+n.shape;
+  /* 有圓角的方塊，幾何體會跟著 size 和半徑變（圓角是真實 mm，不能被拉扁），
+     所以這兩個一定要進鑰匙，否則改了尺寸會走「套差值矩陣」那條捷徑，
+     畫面不會更新——那條捷徑的前提是「形狀沒變」。
+     半徑 0 的方塊不放，維持原本「換位置／改尺寸都不必重算」的快路。 */
+  if(n.kind==='shape')
+    return 's'+n.shape+(boxR(n)?`|${n.size}|${n.r}`:'');
   if(n.kind!=='mesh')return 'g';
   // 不整包 stringify（幾十萬個數字），改用長度＋幾個取樣點。
   // 光靠 id 不夠：換一個檔案可能出現相同編號卻是不同模型。
@@ -1286,24 +1367,28 @@ function nodeLabel(n){
   if(n.name)return n.name;
   if(n.kind==='group')return '組合';
   if(n.kind==='mesh')return '匯入';
-  return {box:'方塊',cylinder:'圓柱',sphere:'球'}[n.shape];
+  if(n.shape==='box')return boxR(n)?'圓角方塊':'方塊';
+  return {cylinder:'圓柱',cone:'圓錐',
+          sphere:'球',dome:'半球',wedge:'楔形',hex:'六角柱'}[n.shape]||'形狀';
 }
 /* 面數＝這個東西自己帶進來多少三角形。它是重算成本的來源
    （成本看的是「有多少面參與布林運算」，不是場上總面數），
    所以直接標在物件樹上，哪個是重的一眼就看得到。
    形狀的單位幾何固定，算過一次就記起來，不必每次畫樹都重算。 */
 const SHAPE_FACES={};
-function shapeFaces(shape){
-  if(SHAPE_FACES[shape]==null){
-    const g=baseGeo(shape).toNonIndexed();
-    SHAPE_FACES[shape]=g.getAttribute('position').count/3;
+function shapeFaces(n){
+  const shape=(typeof n==='string')?n:n.shape;
+  const k=shape+(boxR(n)?'/r':'');       // 圓角方塊的面數固定，但跟直角的不同
+  if(SHAPE_FACES[k]==null){
+    const g=nonIndexed(baseGeo(n));
+    SHAPE_FACES[k]=g.getAttribute('position').count/3;
     g.dispose();
   }
-  return SHAPE_FACES[shape];
+  return SHAPE_FACES[k];
 }
 function faceCount(n){
   if(n.kind==='mesh')return n.tri.length/9;
-  if(n.kind==='shape')return shapeFaces(n.shape);
+  if(n.kind==='shape')return shapeFaces(n);
   let sum=0;
   for(const c of n.children||[])sum+=faceCount(c);
   return sum;
@@ -1392,6 +1477,9 @@ function drawInspector(){
     ${num('X',n.pos[0],'pos',0)}${num('Y',n.pos[1],'pos',1)}${num('Z',n.pos[2],'pos',2)}
     <div class="grp"><h2>旋轉 度</h2></div>
     ${num('X',n.rot[0],'rot',0)}${num('Y',n.rot[1],'rot',1)}${num('Z',n.rot[2],'rot',2)}
+    ${n.shape==='box'?`<div class="grp"><h2>圓角 mm（0 就是直角）</h2></div>
+      <div class="row"><label>R</label>
+      <input type="number" step="0.5" min="0" id="rad" value="${n.r||0}"></div>`:''}
     ${n.kind!=='group'?`<div class="grp"><h2>顏色</h2></div>
       <input type="color" value="${n.color}" id="col">`:''}
     <div class="grp"><h2>放到地面</h2></div>
@@ -1402,6 +1490,13 @@ function drawInspector(){
       if(inp.dataset.p==='size')v=Math.max(.5,v);
       n[inp.dataset.p][+inp.dataset.i]=v;rebuild();};
   });
+  const rad=document.getElementById('rad');
+  if(rad)rad.onchange=()=>{pushUndo();
+    // 上限是最短邊的一半：再大就不是圓角，是把方塊磨成別的東西了
+    const lim=Math.min(...n.size)/2-.05;
+    const v=Math.min(Math.max(parseFloat(rad.value)||0,0),lim);
+    if(v>0)n.r=v; else delete n.r;   // 0 就把欄位拿掉，存檔乾淨、也走回快路
+    rebuild();drawTree();};
   const nm=document.getElementById('nm');
   if(nm)nm.onchange=()=>{pushUndo();
     const v=nm.value.trim();
@@ -1422,10 +1517,7 @@ function drawInspector(){
 /* ============================================================
    6. 指令
    ============================================================ */
-function add(shape){pushUndo();const n=makeShape(shape);roots.push(n);selected=[n.id];rebuild();}
-document.getElementById('addBox').onclick=()=>add('box');
-document.getElementById('addCyl').onclick=()=>add('cylinder');
-document.getElementById('addSph').onclick=()=>add('sphere');
+function add(shape,r){pushUndo();const n=makeShape(shape,r);roots.push(n);selected=[n.id];rebuild();}
 
 // 組合：原料原封不動搬進 children，只是多包一層
 document.getElementById('btnGroup').onclick=()=>{
@@ -1581,7 +1673,7 @@ document.getElementById('fileIn').onchange=e=>{
       if(!Array.isArray(d.roots))throw new Error('格式不符');
       pushUndo();
       dropGeoCache();          // 換一個檔案，舊的幾何體全部作廢
-      roots=d.roots;uid=d.uid||(1+Math.max(0,...JSON.stringify(d.roots).match(/"id":(\d+)/g)
+      roots=migrate(d.roots);uid=d.uid||(1+Math.max(0,...JSON.stringify(d.roots).match(/"id":(\d+)/g)
         .map(s=>+s.split(':')[1])));
       selected=[];rebuild();
     }catch(err){alert('這個檔案讀不進來：'+err.message);}
@@ -1598,13 +1690,22 @@ function autosave(){
   try{localStorage.setItem('csgModeler',str);saveFull=false;}
   catch(e){saveFull=true;}
 }
+/* 圓角方塊曾經是獨立的形狀（shape:'rbox'），後來併回方塊。
+   舊的暫存或存檔可能還帶著它，讀進來時就地換掉。 */
+function migrate(list){
+  for(const n of list||[]){
+    if(n.shape==='rbox'){n.shape='box';if(!(n.r>0))n.r=2;n.color=SHAPE_COLOR.box;}
+    if(n.children)migrate(n.children);
+  }
+  return list;
+}
 function autoload(){
   try{
     const s=localStorage.getItem('csgModeler');
     if(!s)return false;
     const d=JSON.parse(s);
     if(!Array.isArray(d.roots)||!d.roots.length)return false;
-    dropGeoCache();roots=d.roots;uid=d.uid;return true;
+    dropGeoCache();roots=migrate(d.roots);uid=d.uid;return true;
   }catch(e){return false;}
 }
 
@@ -1662,7 +1763,7 @@ document.getElementById('filePlace').onchange=e=>{
       const d=JSON.parse(r.result);
       if(!Array.isArray(d.roots)||!d.roots.length)throw new Error('這個檔案裡沒有東西');
       pushUndo();
-      const kids=JSON.parse(JSON.stringify(d.roots));
+      const kids=migrate(JSON.parse(JSON.stringify(d.roots)));
       kids.forEach(renumber);
       // 包成一層組合，之後可以整個搬動，也可以拆開繼續改
       const g={id:uid++,kind:'group',role:'solid',
@@ -1986,8 +2087,8 @@ function contoursToShapes(contours){
 
 // 擠出成立體，回傳世界座標的三角形陣列（Y 軸朝上，厚度沿 Y）
 function extrudeShapes(shapes,thick){
-  let geo=new THREE.ExtrudeGeometry(shapes,{depth:thick,bevelEnabled:false,curveSegments:1});
-  if(geo.index){const g2=geo.toNonIndexed();geo.dispose();geo=g2;}
+  let geo=nonIndexed(new THREE.ExtrudeGeometry(shapes,
+    {depth:thick,bevelEnabled:false,curveSegments:1}));
   geo.rotateX(-Math.PI/2);           // 平躺在地上，厚度朝上
   const a=geo.attributes.position.array;
   const out=new Array(a.length);
@@ -2375,6 +2476,106 @@ document.getElementById('btnSvg').onclick=()=>{
   });
 };
 
+/* ---- 元件選單：真的用 3D 畫出來 ----
+   使用者是學生，「楔形」「六角柱」光看名字不一定馬上懂，畫成立體的一看就知道。
+
+   做法是一張畫布墊在整區底下，用 setScissor／setViewport 把它切成一格一格，
+   每格畫一個形狀；上面疊一排透明的 <button> 負責文字、hover 和點擊。
+   這樣文字選取、鍵盤 focus、無障礙都還是瀏覽器原生的行為，不用自己重做。
+
+   成本很小（八個形狀加起來不到三千個三角形），但會多開一個 WebGL 畫布。
+   萬一開不起來（很舊的機器、驅動有問題）就 catch 掉，按鈕還在、只是沒有 3D，
+   功能不會壞。 */
+const PALETTE=[
+  // 沒有另外一格「圓角方塊」：圓角就是方塊身上的一個欄位，選了方塊在屬性
+  // 面板就看得到。多一格只會讓人問「這兩個方塊差在哪」，而且用這一格做的
+  // 方塊只要把圓角改成 3，物件樹上就自己變成「圓角方塊」了，更混亂。
+  {shape:'box',      label:'方塊'},
+  {shape:'cylinder', label:'圓柱'},
+  {shape:'cone',     label:'圓錐'},
+  {shape:'sphere',   label:'球'},
+  {shape:'dome',     label:'半球'},
+  {shape:'wedge',    label:'楔形'},
+  {shape:'hex',      label:'六角柱'},
+];
+const IDLE_SPIN=.6;          // 沒被指到時停在這個角度，看得出立體感
+let palR=null, palScene=null, palCam=null, palTiles=[], palW=0, palH=0;
+
+function buildPalette(){
+  const host=document.getElementById('palette');
+  host.innerHTML='<canvas id="palCv"></canvas>'+
+    PALETTE.map((p,i)=>`<button class="pal" data-i="${i}" `+
+      `title="加入${p.label}"><span>${p.label}</span></button>`).join('');
+
+  host.querySelectorAll('button.pal').forEach(b=>{
+    const it=PALETTE[+b.dataset.i];
+    b.onclick=()=>add(it.shape,it.r);
+  });
+
+  try{
+    palR=new THREE.WebGLRenderer({canvas:document.getElementById('palCv'),
+                                  antialias:true,alpha:true});
+    palR.setPixelRatio(Math.min(devicePixelRatio,2));
+    palScene=new THREE.Scene();
+    palScene.add(new THREE.HemisphereLight(0xfffaf0,0x8a8578,1.05));
+    const d=new THREE.DirectionalLight(0xffffff,.45);d.position.set(3,5,4);
+    palScene.add(d);
+    // 拉遠一點、視線落點往上抬：形狀待在上半部，下面留給文字
+    palCam=new THREE.PerspectiveCamera(30,1,.1,50);
+    palCam.position.set(2.5,1.9,3.1);palCam.lookAt(0,.22,0);
+
+    palTiles=PALETTE.map((p,i)=>{
+      const n=makeShape(p.shape,p.r);    // 只是拿來產生單位幾何，不進場景
+      if(p.r)n.r=3.5;                    // 縮圖裡把圓角放大一點，才看得出差別
+      const geo=baseGeo(n);
+      // 依這個形狀的預設尺寸縮一下，縮圖長什麼樣，點下去就得到什麼樣
+      const mx=Math.max(...n.size);
+      geo.scale(n.size[0]/mx,n.size[1]/mx,n.size[2]/mx);
+      const mesh=new THREE.Mesh(geo,new THREE.MeshLambertMaterial(
+        {color:new THREE.Color(p.color||SHAPE_COLOR[p.shape])}));
+      return {mesh, spin:IDLE_SPIN, hot:false,
+              btn:host.querySelector(`button.pal[data-i="${i}"]`)};
+    });
+    palTiles.forEach(t=>{
+      t.btn.onpointerenter=()=>t.hot=true;
+      t.btn.onpointerleave=()=>t.hot=false;
+    });
+  }catch(e){
+    console.warn('元件選單畫不出 3D，退回文字按鈕',e);
+    palR=null;
+  }
+}
+
+function drawPalette(){
+  if(!palR)return;
+  const host=document.getElementById('palette');
+  const W=host.clientWidth, H=host.clientHeight;
+  if(!W||!H)return;                       // 面板被收起來了，不用畫
+  // 尺寸自己記著比對。不能拿 canvas.clientWidth 判斷：它的 CSS 是 100%，
+  // 一開始就等於面板寬度，於是 setSize 永遠不會被呼叫，畫布內部卻還停在
+  // 預設的 300×150——畫出來就是變形又被裁掉。
+  if(W!==palW||H!==palH){palW=W;palH=H;palR.setSize(W,H,false);}
+  const base=host.getBoundingClientRect();
+  palR.setScissorTest(true);
+  palR.clear();
+  for(const t of palTiles){
+    const r=t.btn.getBoundingClientRect();
+    const x=r.left-base.left, y=r.top-base.top, w=r.width, h=r.height;
+    if(w<2||h<2)continue;
+    // WebGL 的 y 是從下往上算的，所以要翻過來
+    palR.setViewport(x,H-y-h,w,h);
+    palR.setScissor(x,H-y-h,w,h);
+    palCam.aspect=w/h;palCam.updateProjectionMatrix();
+    if(t.hot)t.spin+=.02;                 // 滑鼠指著的那一格會慢慢轉
+    t.mesh.rotation.y=t.spin;
+    palScene.add(t.mesh);
+    palR.render(palScene,palCam);
+    palScene.remove(t.mesh);
+  }
+  palR.setScissorTest(false);
+}
+buildPalette();
+
 /* ---- 起手式：先試著接續上次，沒有的話給一個範例 ---- */
 (function seed(){
   if(autoload())return;
@@ -2384,7 +2585,7 @@ document.getElementById('btnSvg').onclick=()=>{
 })();
 document.getElementById('busyStop').onclick=cancelJob;
 resize();updateCam();rebuild();
-(function loop(){requestAnimationFrame(loop);renderer.render(scene,camera);})();
+(function loop(){requestAnimationFrame(loop);renderer.render(scene,camera);drawPalette();})();
 </script>
 </body>
 </html>
