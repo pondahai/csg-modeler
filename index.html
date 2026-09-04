@@ -244,7 +244,7 @@
 </div>
 
 <aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="note" id="gNote"></div></div></aside>
-<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>右鍵拖＝轉視角　中鍵拖＝平移（沒有中鍵就按住 Alt 拖）</div></div>
+<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近</div></div>
 <div id="dim"></div>
 <div id="svgDlgBg"><div id="svgDlg">
   <h3>匯入 SVG</h3>
@@ -1238,13 +1238,50 @@ renderer.domElement.addEventListener('pointerdown',e=>{
   start={x:e.clientX,y:e.clientY,add:e.shiftKey,base:selected.slice()};
   drawMarquee(e.clientX,e.clientY);
 });
+function panBy(dx,dy){
+  const f=sph.r*.0016;
+  const right=new THREE.Vector3().setFromMatrixColumn(camera.matrix,0);
+  const up=new THREE.Vector3().setFromMatrixColumn(camera.matrix,1);
+  target.addScaledVector(right,-dx*f);
+  target.addScaledVector(up,dy*f);
+  updateCam();
+}
+function orbitBy(dx,dy){
+  sph.theta-=dx*.006;
+  sph.phi=Math.max(.05,Math.min(Math.PI-.05,sph.phi-dy*.006));
+  updateCam();
+}
+/* ---- 觸控板模式：Alt 就是「我要動鏡頭」----
+   按住 Alt 直接移動滑鼠就平移，不必再按任何鍵；加按 Shift 就變成轉視角。
+   筆電觸控板要「按住 Alt ＋ 按著板子拖」等於一手按鍵、一手又按又滑，很彆扭；
+   轉視角原本得按右鍵拖（觸控板上是兩指點住再拖）更難。Alt ＋ 兩指滑動輕鬆得多。
+   原本的右鍵拖、中鍵拖、Alt＋左鍵拖全部保留，有滑鼠的人不受影響。
+
+   為什麼是 Alt 而不是 Shift 或 Ctrl：Shift 被「加選」佔著（要 Shift＋點選之前
+   一定會先按著 Shift 移動滑鼠，那樣視角就飛了），Ctrl 被 Ctrl+Z／Ctrl+G 佔著。
+
+   起點是「按住 Alt 之後的第一次移動」，所以第一下只定位、不會跳。Alt＋Tab
+   切出去再回來時，視窗失焦會把起點清掉，回來也只是重新定起點，畫面不會亂飛。 */
+let hoverCam=null;
+addEventListener('blur',()=>{hoverCam=null;});
+addEventListener('keyup',e=>{if(e.key==='Alt')hoverCam=null;});
+
 addEventListener('pointermove',e=>{
-  if(!mode)return;
+  if(!mode){
+    if(e.altKey&&e.buttons===0&&e.target===renderer.domElement){
+      if(hoverCam){
+        const dx=e.clientX-hoverCam.x, dy=e.clientY-hoverCam.y;
+        if(e.shiftKey)orbitBy(dx,dy); else panBy(dx,dy);
+      }
+      hoverCam={x:e.clientX,y:e.clientY};
+    }else hoverCam=null;
+    return;
+  }
+  hoverCam=null;
   setPtr(e);
   if(mode==='orbit'){
-    sph.theta-=(e.clientX-start.x)*.006;
-    sph.phi=Math.max(.05,Math.min(Math.PI-.05,sph.phi-(e.clientY-start.y)*.006));
-    start={x:e.clientX,y:e.clientY};updateCam();return;
+    orbitBy(e.clientX-start.x,e.clientY-start.y);
+    start={x:e.clientX,y:e.clientY};return;
   }
   if(mode==='marquee'){
     drawMarquee(e.clientX,e.clientY);
@@ -1252,12 +1289,8 @@ addEventListener('pointermove',e=>{
     return;
   }
   if(mode==='pan'){
-    const f=sph.r*.0016;
-    const right=new THREE.Vector3().setFromMatrixColumn(camera.matrix,0);
-    const up=new THREE.Vector3().setFromMatrixColumn(camera.matrix,1);
-    target.addScaledVector(right,-(e.clientX-start.x)*f);
-    target.addScaledVector(up,(e.clientY-start.y)*f);
-    start={x:e.clientX,y:e.clientY};updateCam();return;
+    panBy(e.clientX-start.x,e.clientY-start.y);
+    start={x:e.clientX,y:e.clientY};return;
   }
   if(mode==='move'){
     const p=hitPlane(start.y);if(!p)return;
@@ -1399,9 +1432,19 @@ addEventListener('pointerup',e=>{
   }
   mode=null;
 });
+/* 縮放照「捲了多少」來縮，不要一個事件就跳一大格。
+   滑鼠滾輪一格是 deltaY=100，剛好維持原本 12% 的手感；觸控板兩指滑動是
+   一大堆很小的 delta，照比例縮才會滑順，不然會一路飛出去。
+   夾住上下限是因為某些滑鼠一格會送到幾百。
+   不理會 ctrlKey：觸控板的兩指捏合會送 ctrl+wheel，那也是要縮放，
+   而且 preventDefault 之後瀏覽器就不會去縮整個網頁。 */
 renderer.domElement.addEventListener('wheel',e=>{
   e.preventDefault();
-  sph.r=Math.max(12,Math.min(1200,sph.r*(1+Math.sign(e.deltaY)*.12)));updateCam();
+  let d=e.deltaY;
+  if(e.deltaMode===1)d*=16;          // 以「行」為單位
+  else if(e.deltaMode===2)d*=100;    // 以「頁」為單位
+  d=Math.max(-4,Math.min(4,d/100));
+  sph.r=Math.max(12,Math.min(1200,sph.r*Math.pow(1.12,d)));updateCam();
 },{passive:false});
 
 /* ============================================================
