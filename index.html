@@ -139,10 +139,23 @@
   .seg button.on.hole{background:var(--hole);border-color:var(--hole);color:#1b060c;}
   .grp{margin:14px 0 6px;padding-top:12px;border-top:1px solid var(--line);}
   .empty{color:var(--dim);padding:6px;}
+  /* 操作說明預設收起來，只留左下角一顆問號。字很多，擋掉的畫面比它教的還多，
+     而且看過一次就不用再看了。 */
   #hint{
-    position:absolute;left:12px;bottom:12px;color:var(--dim);font-size:11px;
-    background:rgba(255,252,244,.9);border:1px solid #cfc6ae;color:#6b6353;border-radius:5px;padding:6px 9px;
+    position:absolute;left:12px;bottom:44px;color:var(--dim);font-size:11px;
+    background:rgba(255,252,244,.95);border:1px solid #cfc6ae;color:#6b6353;
+    border-radius:5px;padding:8px 11px;display:none;
+    box-shadow:0 4px 18px rgba(0,0,0,.18);
   }
+  #hint.on{display:block;}
+  #hintBtn{
+    position:absolute;left:12px;bottom:12px;z-index:7;
+    width:26px;height:26px;padding:0;border-radius:50%;
+    background:rgba(255,252,244,.9);border:1px solid #cfc6ae;color:#6b6353;
+    font:inherit;font-size:14px;font-weight:700;line-height:1;cursor:pointer;
+  }
+  #hintBtn:hover{background:#fff;color:#2b2b2b;}
+  #hintBtn.on{background:var(--solid);border-color:var(--solid);color:#06121b;}
   #dim{
     position:fixed;display:none;pointer-events:none;z-index:5;
     transform:translate(-50%,-50%);
@@ -259,7 +272,7 @@
 </div>
 
 <aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="note" id="gNote"></div></div></aside>
-<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<br>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>按住 Ctrl 拖物件＝讓它坐到下面那個東西的表面上　拖到一半按 Esc＝取消這次動作</div></div>
+<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><button id="hintBtn" type="button" title="操作說明">?</button><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<br>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>按住 Ctrl 拖物件＝讓它坐到下面那個東西的表面上　拖到一半按 Esc＝取消這次動作</div></div>
 <div id="dim"></div>
 <div id="svgDlgBg" class="dlgBg"><div id="svgDlg" class="dlg">
   <h3>匯入 SVG</h3>
@@ -1261,6 +1274,19 @@ function applyMarquee(x,y){
   selected = start.add ? start.base.concat(hit.filter(id=>!start.base.includes(id))) : hit;
   updateHandles();
 }
+
+/* 左下角的問號：操作說明預設收起來。字很多，擋掉的畫面比它教的還多，
+   而且看過一次就不用再看了。點一下開、再點一下關，Esc 也關得掉。 */
+(function(){
+  const btn=document.getElementById('hintBtn'), box=document.getElementById('hint');
+  const set=v=>{box.classList.toggle('on',v);btn.classList.toggle('on',v);
+                btn.title=v?'關閉操作說明':'操作說明';};
+  btn.onclick=()=>set(!box.classList.contains('on'));
+  // Esc 先給「取消拖曳」用，沒在拖的時候才拿來關說明
+  addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&!mode&&box.classList.contains('on'))set(false);
+  });
+})();
 
 renderer.domElement.addEventListener('contextmenu',e=>e.preventDefault());
 renderer.domElement.addEventListener('pointerdown',e=>{
