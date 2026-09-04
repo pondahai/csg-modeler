@@ -1130,6 +1130,69 @@ function* geoForRootG(n){
   }
   return geo;
 }
+/* ---- 「先看到東西」的預覽層 ----
+   剛開網頁或剛開檔時，畫面是空的，而慢的一直都是布林運算那一步。所以先把
+   每個零件「原本的樣子」直接畫出來——方塊就是方塊、匯入的 STL 就是那個
+   STL，完全不做加減，只套一次矩陣，幾乎是瞬間的事。還在等布林運算的東西
+   用線框（面太多就改半透明，線框畫幾十萬條線反而卡）表示「還沒算好」，
+   算完一個就換上一個真的。
+
+   預覽放在自己的 previewLayer，不加進 meshes／handles，所以點不到也框不到
+   ——「還沒算好的東西不能碰」就是靠這個（跟工作平面那層玻璃、鬼影同樣的
+   做法）。previewLayer 不影響 rebuildG 判斷「畫面上有沒有東西」，那看的是
+   objLayer。 */
+const previewLayer=new THREE.Group();scene.add(previewLayer);
+const previews=new Map();               // 最上層節點 id → 那一團預覽
+const PREVIEW_WIRE_MAX=2000;            /* 超過這個面數就不畫線框，改成很淡的
+   半透明。線框在密的模型上會糊成灰灰的一團，比實體還難看懂——方塊圓柱這種
+   低面數的零件畫線框才看得出「這是骨架、還沒算好」。 */
+function disposeTree(o){
+  o.traverse(c=>{if(c.geometry)c.geometry.dispose();if(c.material)c.material.dispose();});
+}
+function previewClear(){
+  for(const o of previews.values()){previewLayer.remove(o);disposeTree(o);}
+  previews.clear();
+}
+function dropPreview(id){
+  const o=previews.get(id);
+  if(!o)return;
+  previewLayer.remove(o);disposeTree(o);previews.delete(id);
+}
+/* 把一個節點底下的零件原樣攤成一堆 mesh。組合就一路往下走，把矩陣乘進去，
+   不做任何布林運算——這裡的重點就是「不算」。 */
+function* previewPartsG(n,M,grp){
+  const m=new THREE.Matrix4().multiplyMatrices(M,matrixOf(n));
+  if(n.kind==='group'){
+    for(const c of n.children||[])yield* previewPartsG(c,m,grp);
+    return;
+  }
+  let g;
+  if(n.kind==='mesh'){
+    g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.Float32BufferAttribute(Float32Array.from(n.tri),3));
+  }else{
+    g=nonIndexed(baseGeo(n)).clone();
+  }
+  g.applyMatrix4(m);
+  const faces=g.getAttribute('position').count/3;
+  const hole=n.role==='hole';
+  const mat=faces<=PREVIEW_WIRE_MAX
+    ? new THREE.MeshBasicMaterial({color:hole?0xe8657f:0x7d8ea6,wireframe:true,
+        transparent:true,opacity:.55,depthWrite:false})
+    : new THREE.MeshBasicMaterial({color:hole?0xe8657f:0x8b9bb0,
+        transparent:true,opacity:.28,depthWrite:false,side:THREE.DoubleSide});
+  grp.add(new THREE.Mesh(g,mat));
+  yield;
+}
+function* showPreviewsG(){
+  previewClear();
+  for(const n of roots){
+    const grp=new THREE.Group();
+    try{ yield* previewPartsG(n,new THREE.Matrix4(),grp); }
+    catch(e){ console.warn(e); }
+    if(grp.children.length){previewLayer.add(grp);previews.set(n.id,grp);}
+  }
+}
 function addMesh(n,geo){
   const isHole=n.role==='hole';
   const mat=new THREE.MeshLambertMaterial({
@@ -1152,12 +1215,15 @@ function* rebuildG(my){
   const stream=objLayer.children.length===0;
   const built=[];
   my.built=stream?null:built;
-  if(stream){meshes.length=0;drawTree();}   // 清單先出來，讓人知道要等什麼
+  if(stream){
+    meshes.length=0;drawTree();            // 清單先出來，讓人知道要等什麼
+    yield* showPreviewsG();                // 零件原樣先畫出來，馬上有東西可以轉
+  }
   for(let i=0;i<roots.length;i++){
     const n=roots[i];
     my.stage=roots.length>1?`計算中 ${i+1}/${roots.length}`:'計算中';
     const geo=yield* geoForRootG(n);
-    if(stream)addMesh(n,geo);
+    if(stream){addMesh(n,geo);dropPreview(n.id);}   // 算好的換掉自己那一團預覽
     else built.push({n,geo});
     yield;
   }
@@ -1174,6 +1240,7 @@ function* rebuildG(my){
     meshes.length=0;
     for(const {n,geo} of built)addMesh(n,geo);
   }
+  previewClear();
   drawTree();drawInspector();updateHandles();autosave();
   let tris=0;
   for(const m of meshes){
@@ -1218,7 +1285,7 @@ function startJob(makeIt,label,onDone){
   soon(step);
 }
 function rebuild(){
-  ghostClear();
+  ghostClear();previewClear();
   startJob(my=>rebuildG(my),'計算中',(tris,ms)=>updateGauge(tris,ms));
 }
 function cancelJob(){
