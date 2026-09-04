@@ -259,7 +259,7 @@
 </div>
 
 <aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="note" id="gNote"></div></div></aside>
-<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<br>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>按住 Ctrl 拖物件＝讓它坐到下面那個東西的表面上</div></div>
+<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<br>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>按住 Ctrl 拖物件＝讓它坐到下面那個東西的表面上　拖到一半按 Esc＝取消這次動作</div></div>
 <div id="dim"></div>
 <div id="svgDlgBg" class="dlgBg"><div id="svgDlg" class="dlg">
   <h3>匯入 SVG</h3>
@@ -1560,6 +1560,45 @@ function liveScale(F,anchor){
   if(any){boxHelper.box.copy(b);placeHandles(b);showDim(b);}
   drawInspector();
 }
+/* 拖到一半後悔了：按 Esc 取消這一次動作。
+
+   拖曳中所有東西都還在「預覽」狀態——節點的參數已經被改了，但幾何體還沒重算
+   （布林運算要等放開滑鼠），畫面上看到的是直接動 mesh 的 transform 做出來的。
+   所以取消只要做三件事：參數從 startState 抄回來、把 mesh 的 transform 歸零、
+   把 beginEdit() 推進去的那一步 undo 拿掉（不然會留下一步什麼都沒做的紀錄）。
+   **不必也不應該 rebuild**：幾何體從頭到尾沒被動過，快取裡那一份還是對的。
+
+   還沒真的動到參數（dragEdited 為假）就只是放掉這次拖曳，什麼都不用還原。 */
+function cancelDrag(){
+  if(mode==='marquee'){
+    selected=start.base.slice();               // 框選還原成拖之前選的那些
+    document.getElementById('marquee').style.display='none';
+    mode=null;drawTree();drawInspector();updateHandles();
+    return true;
+  }
+  if(mode!=='move'&&mode!=='moveY'&&mode!=='scaleH'&&mode!=='rotate')return false;
+  if(dragEdited){
+    if(undoStack.length)undoStack.pop();
+    selected.forEach((id,i)=>{
+      const n=findNode(id), st=startState[i];
+      if(!n||!st)return;
+      n.pos=st.pos.slice();n.rot=st.rot.slice();n.size=st.size.slice();
+      if(st.post)n.post=st.post.slice(); else delete n.post;
+    });
+  }
+  for(const m of meshes){                      // 清掉拖曳時的預覽變換
+    m.position.set(0,0,0);m.scale.set(1,1,1);m.quaternion.identity();
+    m.updateMatrixWorld(true);
+  }
+  mode=null;dragEdited=false;hideDim();
+  drawTree();drawInspector();updateHandles();
+  return true;
+}
+// 用 capture，而且不管焦點在哪都要能取消（拖曳中焦點可能還留在屬性面板的輸入框）
+addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&mode&&cancelDrag()){e.preventDefault();e.stopPropagation();}
+},true);
+
 addEventListener('pointerup',e=>{
   if(mode==='marquee'){
     // 沒拖就是在空白處點一下＝清空選取（applyMarquee 會處理成「沒框到任何東西」）

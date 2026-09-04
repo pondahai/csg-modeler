@@ -144,6 +144,20 @@ Cookie」設定影響——跟 Web Worker 同一個死因。也不要改成把�
 換上新 mesh 的那一瞬間才消失（新 mesh 本來就是單位矩陣），中間才接得上。
 中途取消時留著也是對的：畫面停在使用者放手的位置。
 
+**拖到一半按 Esc 可以取消（`cancelDrag()`）。** 拖曳中所有東西都還在「預覽」
+狀態——節點的參數已經被改了，但幾何體還沒重算（布林運算要等放開滑鼠），畫面上
+看到的是直接動 mesh 的 transform 做出來的。所以取消只要三件事：參數從
+`startState` 抄回來、把 mesh 的 transform 歸零、把 `beginEdit()` 推進去的那一步
+undo 拿掉（不然會留下一步什麼都沒做的紀錄）。**不必也不應該 rebuild**：幾何體
+從頭到尾沒被動過，快取裡那一份還是對的。
+
+move／moveY／scaleH／rotate 四種都走同一條路（它們的 pointerdown 都有設
+`startState`），框選則是把 `selected` 還原成 `start.base`。鍵盤監聽要用
+**capture 而且不看焦點在哪**——拖曳中焦點可能還留在屬性面板的輸入框上，
+主要那個 keydown 監聽器碰到 INPUT 會直接 return。
+
+新增拖曳類操作時記得一起接上。
+
 **拖曳時不重算 CSG。** 移動、縮放、旋轉的過程中只調整 mesh 的 transform 做預覽，放開滑鼠才呼叫 `rebuild()` 重算布林運算。因為 BSP 運算成本高，每格都算會頓。新增拖曳類操作時請沿用這個模式（參考 `liveMove()`、`liveScale()`）。
 
 **縮放分兩條路，看物件轉得正不正。** `size` 是物件自己的長寬高（旋轉之前），
