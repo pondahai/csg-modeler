@@ -525,8 +525,8 @@ let undoStack=[], redoStack=[];
 
 // 每種形狀有自己的固定顏色，一眼認得出誰是誰
 const SHAPE_COLOR={box:'#5b8dd6',cylinder:'#e0a83c',cone:'#e08a3c',
-                   sphere:'#6fb98f',dome:'#5fae9c',wedge:'#c9705f',hex:'#8f9bd6',
-                   mesh:'#b07ad6'};
+                   sphere:'#6fb98f',dome:'#5fae9c',wedge:'#c9705f',
+                   prism:'#8f9bd6',tube:'#d6a05b',mesh:'#b07ad6'};
 // 預設尺寸：多數形狀用 20mm 的立方框，半球扁一點才像半球
 const SHAPE_SIZE={dome:[20,10,20]};
 function makeShape(shape,r){
@@ -534,6 +534,8 @@ function makeShape(shape,r){
   const n={id:uid++,kind:'shape',shape,role:'solid',
            pos:[0,size[1]/2,0],rot:[0,0,0],size,color:SHAPE_COLOR[shape]};
   if(shape==='box'&&r>0)n.r=r;   // 圓角半徑，單位是真實的 mm；沒有就是直角
+  if(shape==='tube')n.t=2;       // 管壁厚度 mm
+  if(shape==='prism')n.sides=6;  // 幾邊形
   return n;
 }
 function findNode(id,list=roots){
@@ -593,13 +595,50 @@ function boxR(n){return (n&&typeof n==='object'&&n.r>0)?n.r:0;}
 /* 有些單位幾何（楔形、圓角方塊走 ExtrudeGeometry）本來就沒有索引，
    再呼叫一次 toNonIndexed() 只會讓 three.js 印警告，所以先問一下。 */
 function nonIndexed(g){return g.index?(()=>{const t=g.toNonIndexed();g.dispose();return t;})():g;}
+/* 圓管：壁厚是真實的毫米，所以跟圓角方塊一樣「自己看 size」——用真實尺寸
+   做出來再先除掉，後面 matrixOf 會乘回去。
+   做法是拿一個「口字形」的剖面繞著中軸車一圈（LatheGeometry）：剖面是封閉的
+   迴圈，所以車出來的管子上下兩個環形端面會自動封起來，是一個完整的實體。
+   X 和 Z 不一樣長時（橢圓管），管壁會跟著被拉，這是必然的，不是 bug。 */
+function tubeWall(n){return (n&&n.t>0)?n.t:2;}
+function tubeGeo(n){
+  const s=n.size||[1,1,1];
+  const sx=Math.abs(s[0])||1, sy=Math.abs(s[1])||1;
+  const ro=sx/2;
+  const t=Math.max(.05,Math.min(tubeWall(n),ro-.05));
+  const ri=ro-t, hy=sy/2;
+  const g=new THREE.LatheGeometry([
+    new THREE.Vector2(ro,-hy), new THREE.Vector2(ro,hy),
+    new THREE.Vector2(ri, hy), new THREE.Vector2(ri,-hy),
+    new THREE.Vector2(ro,-hy)],48);
+  g.scale(1/sx,1/sy,1/sx);      // 先除掉，後面照樣乘回來
+  return g;
+}
+/* 正 N 邊形柱。這是唯一「不塞滿 1×1×1」的形狀：多邊形一定要是正的
+   （六角柱要拿去挖螺帽孔，歪掉就不能用），所以它是內接在 size 這個圓裡，
+   size 量的是**外接圓直徑**，不是對邊距，也不是外框寬度。
+   邊數是單數時（三角形、五角形）多邊形本來就不對稱，先把包圍盒移到正中間，
+   免得把手和「貼齊工作平面」抓到偏掉的中心。 */
+function prismGeo(n){
+  const g=new THREE.CylinderGeometry(.5,.5,1,prismSides(n));
+  g.computeBoundingBox();
+  const c=g.boundingBox.getCenter(new THREE.Vector3());
+  if(c.lengthSq()>1e-12)g.translate(-c.x,-c.y,-c.z);
+  return g;
+}
+function prismSides(n){
+  const v=Math.round((n&&n.sides)||6);
+  return Math.max(3,Math.min(24,v));
+}
 function baseGeo(n){
   const shape=(typeof n==='string')?n:n.shape;
   switch(shape){
     case 'box':      return boxR(n)?roundedBoxGeo(n):new THREE.BoxGeometry(1,1,1);
     case 'cylinder': return new THREE.CylinderGeometry(.5,.5,1,48);
     case 'cone':     return new THREE.ConeGeometry(.5,1,48);
-    case 'hex':      return new THREE.CylinderGeometry(.5,.5,1,6);
+    // 正 N 邊形柱：六角柱只是 N=6，不另外做一種形狀
+    case 'prism':    return prismGeo(n);
+    case 'tube':     return tubeGeo(n);
     case 'wedge':    return wedgeGeo();
     case 'dome':     return domeGeo();
     default:         return new THREE.SphereGeometry(.5,32,20);
@@ -831,8 +870,13 @@ function kindKey(n){
      所以這兩個一定要進鑰匙，否則改了尺寸會走「套差值矩陣」那條捷徑，
      畫面不會更新——那條捷徑的前提是「形狀沒變」。
      半徑 0 的方塊不放，維持原本「換位置／改尺寸都不必重算」的快路。 */
-  if(n.kind==='shape')
-    return 's'+n.shape+(boxR(n)?`|${n.size}|${n.r}`:'');
+  if(n.kind==='shape'){
+    let k='s'+n.shape;
+    if(boxR(n))          k+=`|${n.size}|${n.r}`;
+    if(n.shape==='tube') k+=`|${n.size}|${n.t}`;   // 壁厚是真實 mm，跟著 size 變
+    if(n.shape==='prism')k+=`|${prismSides(n)}`;   // 邊數不看 size，只放邊數
+    return k;
+  }
   if(n.kind!=='mesh')return 'g';
   // 不整包 stringify（幾十萬個數字），改用長度＋幾個取樣點。
   // 光靠 id 不夠：換一個檔案可能出現相同編號卻是不同模型。
@@ -1368,8 +1412,13 @@ function nodeLabel(n){
   if(n.kind==='group')return '組合';
   if(n.kind==='mesh')return '匯入';
   if(n.shape==='box')return boxR(n)?'圓角方塊':'方塊';
-  return {cylinder:'圓柱',cone:'圓錐',
-          sphere:'球',dome:'半球',wedge:'楔形',hex:'六角柱'}[n.shape]||'形狀';
+  if(n.shape==='prism'){
+    const k=prismSides(n);
+    const zh={3:'三',4:'四',5:'五',6:'六',7:'七',8:'八',9:'九',10:'十'}[k];
+    return zh?zh+'角柱':k+' 邊形柱';
+  }
+  return {cylinder:'圓柱',cone:'圓錐',sphere:'球',
+          dome:'半球',wedge:'楔形',tube:'圓管'}[n.shape]||'形狀';
 }
 /* 面數＝這個東西自己帶進來多少三角形。它是重算成本的來源
    （成本看的是「有多少面參與布林運算」，不是場上總面數），
@@ -1378,7 +1427,8 @@ function nodeLabel(n){
 const SHAPE_FACES={};
 function shapeFaces(n){
   const shape=(typeof n==='string')?n:n.shape;
-  const k=shape+(boxR(n)?'/r':'');       // 圓角方塊的面數固定，但跟直角的不同
+  // 面數會跟著參數變的，鑰匙要帶上那個參數
+  const k=shape+(boxR(n)?'/r':'')+(shape==='prism'?'/'+prismSides(n):'');
   if(SHAPE_FACES[k]==null){
     const g=nonIndexed(baseGeo(n));
     SHAPE_FACES[k]=g.getAttribute('position').count/3;
@@ -1480,6 +1530,12 @@ function drawInspector(){
     ${n.shape==='box'?`<div class="grp"><h2>圓角 mm（0 就是直角）</h2></div>
       <div class="row"><label>R</label>
       <input type="number" step="0.5" min="0" id="rad" value="${n.r||0}"></div>`:''}
+    ${n.shape==='tube'?`<div class="grp"><h2>管壁厚 mm</h2></div>
+      <div class="row"><label>T</label>
+      <input type="number" step="0.5" min="0.1" id="wall" value="${tubeWall(n)}"></div>`:''}
+    ${n.shape==='prism'?`<div class="grp"><h2>幾邊形</h2></div>
+      <div class="row"><label>N</label>
+      <input type="number" step="1" min="3" max="24" id="sides" value="${prismSides(n)}"></div>`:''}
     ${n.kind!=='group'?`<div class="grp"><h2>顏色</h2></div>
       <input type="color" value="${n.color}" id="col">`:''}
     <div class="grp"><h2>放到地面</h2></div>
@@ -1496,6 +1552,16 @@ function drawInspector(){
     const lim=Math.min(...n.size)/2-.05;
     const v=Math.min(Math.max(parseFloat(rad.value)||0,0),lim);
     if(v>0)n.r=v; else delete n.r;   // 0 就把欄位拿掉，存檔乾淨、也走回快路
+    rebuild();drawTree();};
+  const wall=document.getElementById('wall');
+  if(wall)wall.onchange=()=>{pushUndo();
+    // 上限是外半徑：再厚就整根實心了，那就該用圓柱
+    const lim=Math.abs(n.size[0])/2-.05;
+    n.t=Math.max(.1,Math.min(parseFloat(wall.value)||2,lim));
+    rebuild();};
+  const sides=document.getElementById('sides');
+  if(sides)sides.onchange=()=>{pushUndo();
+    n.sides=Math.max(3,Math.min(24,Math.round(parseFloat(sides.value)||6)));
     rebuild();drawTree();};
   const nm=document.getElementById('nm');
   if(nm)nm.onchange=()=>{pushUndo();
@@ -1695,6 +1761,8 @@ function autosave(){
 function migrate(list){
   for(const n of list||[]){
     if(n.shape==='rbox'){n.shape='box';if(!(n.r>0))n.r=2;n.color=SHAPE_COLOR.box;}
+    // 六角柱曾經是獨立的形狀，後來併進「正 N 邊形柱」的 N=6
+    if(n.shape==='hex'){n.shape='prism';n.sides=6;n.color=SHAPE_COLOR.prism;}
     if(n.children)migrate(n.children);
   }
   return list;
@@ -2496,7 +2564,8 @@ const PALETTE=[
   {shape:'sphere',   label:'球'},
   {shape:'dome',     label:'半球'},
   {shape:'wedge',    label:'楔形'},
-  {shape:'hex',      label:'六角柱'},
+  {shape:'prism',    label:'多邊形柱'},
+  {shape:'tube',     label:'圓管'},
 ];
 const IDLE_SPIN=.6;          // 沒被指到時停在這個角度，看得出立體感
 let palR=null, palScene=null, palCam=null, palTiles=[], palW=0, palH=0;
