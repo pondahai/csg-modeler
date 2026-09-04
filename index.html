@@ -244,7 +244,7 @@
 </div>
 
 <aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="note" id="gNote"></div></div></aside>
-<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<br>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>坐在東西上的物件，拖到哪就坐到哪（按住 Ctrl 拖＝不要吸附）</div></div>
+<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<br>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>按住 Ctrl 拖物件＝讓它坐到下面那個東西的表面上</div></div>
 <div id="dim"></div>
 <div id="svgDlgBg"><div id="svgDlg">
   <h3>匯入 SVG</h3>
@@ -1260,10 +1260,7 @@ renderer.domElement.addEventListener('pointerdown',e=>{
     dragEdited=false;
     startState=selected.map(sid=>dragCopy(findNode(sid)));
     mode='move';start={p:hitPlane(hits[0].point.y),y:hits[0].point.y};
-    // 拖之前先問一次：它本來就坐在某個東西上嗎？浮著的就整趟都不吸。
-    const sb=selWorldBox();
-    start.box=sb;
-    start.rest=!!sb&&(sb.min.y-surfaceUnder(sb,selected))<SNAP_GAP;
+    start.box=selWorldBox();     // 吸附要用：整包東西現在的外框
     return;
   }
   // 空白處拖＝框選。框出來的矩形沿著目前視角無限延伸出去，
@@ -1331,10 +1328,10 @@ addEventListener('pointermove',e=>{
     const dx=Math.round((p.x-start.p.x)/SNAP)*SNAP, dz=Math.round((p.z-start.p.z)/SNAP)*SNAP;
     if(!dragEdited&&!dx&&!dz)return;      // 手震一兩格，不算動過
     beginEdit();
-    // 吸附：把選取範圍平移到新位置，看它下面現在是什麼高度，整批一起落上去。
-    // 整批用同一個 dy，所以幾個東西之間的高低關係不會被打亂。
+    // 吸附（按住 Ctrl 才做）：把選取範圍平移到新位置，看它下面現在是什麼
+    // 高度，整批一起落上去。整批用同一個 dy，幾個東西之間的高低關係不會亂。
     let dy=0;
-    if(start.rest&&!e.ctrlKey&&start.box){
+    if(e.ctrlKey&&start.box){
       const nb=start.box.clone().translate(new THREE.Vector3(dx,0,dz));
       dy=Math.round((surfaceUnder(nb,selected)-nb.min.y)*100)/100;
     }
@@ -1428,11 +1425,13 @@ addEventListener('pointermove',e=>{
 // 移動時不必重算 CSG，直接位移 mesh，放開再重建
 /* ---- 表面吸附：拖曳時自動坐在下面的東西上 ----
 
-   規則刻意訂得保守：**只有「本來就坐在某個東西上」的物件才會吸**。
-   拖之前先量一次它離下方表面有多遠，貼著（<0.05mm）才算「坐著」；
-   本來就浮在空中的（例如用黃錐拉高的、或穿過板子的孔洞）拖曳完全不動高度，
-   跟以前一模一樣。這樣既不會有人被莫名其妙的掉落嚇到，也不必記得關掉。
-   按住 Ctrl 拖曳可以臨時關掉吸附。
+   **預設不吸，按住 Ctrl 拖曳才吸。** 一開始做成預設吸、按 Ctrl 關掉，
+   專案擁有者決定反過來：拖東西的時候高度自己會變，即使規則講得通，
+   還是會讓人覺得東西不受控制。改成明示的之後，「Ctrl 拖＝我要它坐好」
+   是一個動作、一個結果，不必去記「它剛剛算不算坐著」。
+
+   按住 Ctrl 就吸，不管它本來是坐著還是浮在空中——既然是明說的，
+   浮在半空的東西按 Ctrl 拖過去也應該乖乖坐下。
 
    找表面用「從高處往下打幾根射線」，取打到的最高點；沒打到就是工作平面 0。
    取樣點是footprint的九宮格，稍微往內縮——正好打在邊緣上會因為浮點誤差
@@ -1444,7 +1443,6 @@ addEventListener('pointermove',e=>{
    要一個一個三角形試，380k 面 × 九根射線 × 每一次滑鼠移動 = 畫面會頓。
    匯入的大模型多半是拿來挖洞的，不是拿來當桌面用的，所以這個取捨划算。
    代價：拿一顆很細的球當底座時，東西會坐在它的包圍盒頂上、浮在空中。 */
-const SNAP_GAP=0.05;          // 離表面多近才算「坐在上面」
 const SNAP_FACE_MAX=30000;    // 超過這個面數就只看包圍盒頂面
 const snapRay=new THREE.Raycaster();
 function worldBoxOf(m){
