@@ -180,32 +180,47 @@
     font:inherit;font-size:12px;padding:3px 10px;cursor:pointer;
   }
   #busyStop:hover{background:#443714;}
-  /* SVG 匯入的小視窗：問厚度和曲線精細度 */
-  #svgDlgBg{
+  /* 小視窗（SVG 匯入問厚度、文字問內容），兩個共用同一套樣式 */
+  .dlgBg{
     position:fixed;inset:0;z-index:30;display:none;
     background:rgba(0,0,0,.45);align-items:center;justify-content:center;
   }
-  #svgDlgBg.on{display:flex;}
-  #svgDlg{
+  .dlgBg.on{display:flex;}
+  .dlg{
     background:var(--panel);border:1px solid var(--line);border-radius:8px;
     padding:16px 18px;width:330px;box-shadow:0 10px 40px rgba(0,0,0,.5);
   }
-  #svgDlg h3{margin:0 0 4px;font-size:14px;}
-  #svgDlg .sub{color:var(--dim);font-size:11px;margin-bottom:12px;
+  .dlg h3{margin:0 0 4px;font-size:14px;}
+  .dlg .sub{color:var(--dim);font-size:11px;margin-bottom:12px;
                white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  #svgDlg .lab{color:var(--dim);font-size:11px;margin:10px 0 5px;}
-  #svgDlg .tip{color:var(--dim);font-size:11px;margin-top:6px;line-height:1.4;}
-  #svgDlg .seg button{padding:6px 0;font-size:12px;}
-  #svgDlg .seg{margin-bottom:0;}
-  #svgDlg .foot{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
+  .dlg .lab{color:var(--dim);font-size:11px;margin:10px 0 5px;}
+  .dlg .tip{color:var(--dim);font-size:11px;margin-top:6px;line-height:1.4;}
+  .dlg .seg button{padding:6px 0;font-size:12px;}
+  .dlg .seg{margin-bottom:0;}
+  .dlg .foot{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
   #svgThk{width:80px;}
-  #svgWait{
+  .dlgWait{
     display:none;background:var(--panel);border:1px solid var(--line);border-radius:8px;
     padding:18px 22px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.5);
   }
-  #svgWait span{color:var(--dim);font-size:11px;}
-  #svgDlgBg.wait #svgDlg{display:none;}
-  #svgDlgBg.wait #svgWait{display:block;}
+  .dlgWait span{color:var(--dim);font-size:11px;}
+  .dlgBg.wait .dlg{display:none;}
+  .dlgBg.wait .dlgWait{display:block;}
+  /* 文字視窗自己的東西 */
+  #txtDlg{width:360px;}
+  #txtIn{
+    width:100%;box-sizing:border-box;font:inherit;font-size:13px;
+    color:var(--text);background:var(--ink);border:1px solid var(--line);
+    border-radius:4px;padding:5px 6px;resize:vertical;min-height:44px;
+  }
+  #txtFont{width:100%;box-sizing:border-box;}
+  #txtPrev{
+    width:100%;height:64px;background:#fff;border:1px solid var(--line);
+    border-radius:4px;margin-top:8px;display:block;
+  }
+  .dlg .two{display:flex;gap:10px;}
+  .dlg .two>div{flex:1;}
+  .dlg .two input{width:100%;box-sizing:border-box;}
 </style>
 </head>
 <body>
@@ -231,6 +246,7 @@
       <button id="btnPlace">插入元件（存檔）</button>
       <button id="btnImportStl">匯入 STL</button>
       <button id="btnImportSvg">匯入 SVG（平面圖形）</button>
+      <button id="btnText">加入文字</button>
       <div class="head">送出去列印／給別的軟體</div>
       <button id="btnStl">匯出 STL</button>
       <button id="btnObj">匯出 OBJ</button>
@@ -246,7 +262,7 @@
 <aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="note" id="gNote"></div></div></aside>
 <div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<br>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>按住 Ctrl 拖物件＝讓它坐到下面那個東西的表面上</div></div>
 <div id="dim"></div>
-<div id="svgDlgBg"><div id="svgDlg">
+<div id="svgDlgBg" class="dlgBg"><div id="svgDlg" class="dlg">
   <h3>匯入 SVG</h3>
   <div class="sub" id="svgName"></div>
   <div class="lab">厚度（mm）</div>
@@ -263,7 +279,44 @@
     <button id="svgOk">放進來</button>
   </div>
 </div>
-<div id="svgWait">正在把圖形變成立體…<br><span>描圖來的圖案線條很多，可能要等幾秒</span></div>
+<div id="svgWait" class="dlgWait">正在把圖形變成立體…<br><span>描圖來的圖案線條很多，可能要等幾秒</span></div>
+</div>
+<div id="txtDlgBg" class="dlgBg"><div id="txtDlg" class="dlg">
+  <h3>加入文字</h3>
+  <div class="sub">做出來是一塊實體，可以改成孔洞、可以跟外殼組合</div>
+  <textarea id="txtIn" placeholder="要刻的字（可以換行）">文字</textarea>
+  <div class="lab">字型（電腦上要裝了才有，沒有就用預設的）</div>
+  <select id="txtFont">
+    <option value="Microsoft JhengHei">微軟正黑體</option>
+    <option value="DFKai-SB">標楷體</option>
+    <option value="PMingLiU">新細明體</option>
+    <option value="Arial">Arial</option>
+    <option value="Times New Roman">Times New Roman</option>
+    <option value="Impact">Impact（很粗）</option>
+    <option value="__custom">自己打字型名稱…</option>
+  </select>
+  <input type="text" id="txtFontName" placeholder="字型名稱" style="display:none;width:100%;box-sizing:border-box;margin-top:6px">
+  <div class="two" style="margin-top:10px">
+    <div><div class="lab" style="margin-top:0">字高 mm（整段）</div>
+      <input type="number" id="txtSize" value="10" min="1" step="1"></div>
+    <div><div class="lab" style="margin-top:0">厚度 mm</div>
+      <input type="number" id="txtThk" value="2" min="0.1" step="0.5"></div>
+  </div>
+  <div class="lab"><label><input type="checkbox" id="txtBold"> 粗體（刻出來比較不容易斷）</label></div>
+  <div class="lab">邊緣精細度</div>
+  <div class="seg" id="txtQual">
+    <button data-q="coarse">粗</button>
+    <button data-q="mid" class="on">中</button>
+    <button data-q="fine">細</button>
+  </div>
+  <canvas id="txtPrev"></canvas>
+  <div class="tip">字的輪廓是描出來的，放很大看會有一點點鋸齒。刻 3～10mm 的字看不出來。</div>
+  <div class="foot">
+    <button id="txtCancel">取消</button>
+    <button id="txtOk">放進來</button>
+  </div>
+</div>
+<div id="txtWait" class="dlgWait">正在把文字變成立體…<br><span>字多或選「細」的時候要等幾秒</span></div>
 </div>
 <aside id="insp"><h2>基本元件</h2><div id="palette"></div><div class="grp"><h2>屬性</h2></div><div id="inspBody"></div></aside>
 
@@ -2551,6 +2604,267 @@ document.getElementById('fileSvg').onchange=e=>{
   };
   r.onerror=()=>alert('檔案讀取失敗。');
   r.readAsText(f);
+};
+
+/* ============================================================
+   文字：把字畫成圖，再把黑白邊界描成輪廓
+   ============================================================
+   **不要自己寫字型解析器，也不要內嵌字型。** 內嵌一套中文字型是 5～15MB，
+   會把這個「複製到隨身碟就能用」的檔案撐成十幾倍；自己解析 TTF 又是幾百行
+   容易出錯的二進位處理，而且只能用內嵌的那幾套字。
+
+   改成：用 canvas 把字畫出來（電腦上裝了什麼字型就能用什麼，中文完全沒問題），
+   再把「有墨水／沒墨水」的邊界描成一圈一圈的輪廓，交給 SVG 匯入那條管線
+   （contoursToShapes → extrudeShapes）擠出厚度。內外圈的判定、三角化、
+   擠出全部沿用，不必重寫。
+
+   代價是輪廓是「描」出來的，放很大看邊緣有一點點鋸齒。描圖解析度固定
+   TXT_PX（字高 600 像素），精細度那三段調的是**簡化容差**不是解析度——
+   容差直接決定點數也就決定面數，而重畫一次比較貴。
+
+   做出來是 kind:'mesh' 節點，跟匯入的 STL／SVG 完全同一條路：可以當孔洞、
+   可以組合、可以存檔、可逆。不需要新的節點型別。 */
+const TXT_PX=600;                                    // 描圖時的字高（像素）
+const TXT_TOL={coarse:2.5, mid:1.0, fine:0.4};       // 簡化容差（像素）
+
+function textMask(opt){
+  const lines=opt.text.split(/\r?\n/);
+  while(lines.length&&!lines[lines.length-1].trim())lines.pop();
+  while(lines.length&&!lines[0].trim())lines.shift();
+  if(!lines.length)return null;
+  const cv=document.createElement('canvas'), ctx=cv.getContext('2d');
+  const face=px=>`${opt.bold?'bold ':''}${px}px "${opt.font}"`;
+  // 先用 100px 量一次，換算出「讓整段字高等於 TXT_PX」該用多大的字級
+  ctx.font=face(100);
+  let asc=0,desc=0,wid=0;
+  for(const l of lines){
+    const m=ctx.measureText(l||' ');
+    asc =Math.max(asc, m.actualBoundingBoxAscent||80);
+    desc=Math.max(desc,m.actualBoundingBoxDescent||20);
+    wid =Math.max(wid, m.width);
+  }
+  const lh=125;                                      // 100px 字級的行距
+  const ink=asc+desc+lh*(lines.length-1);
+  if(!(ink>0)||!(wid>0))return null;
+  const k=TXT_PX/ink, pad=24;
+  cv.width =Math.ceil(wid*k)+pad*2;
+  cv.height=Math.ceil(ink*k)+pad*2;
+  ctx.font=face(100*k);
+  ctx.textBaseline='alphabetic';ctx.fillStyle='#fff';
+  lines.forEach((l,i)=>ctx.fillText(l,pad,pad+asc*k+i*lh*k));
+  return ctx.getImageData(0,0,cv.width,cv.height);
+}
+
+/* 描邊界：把每個「有墨水」的像素朝外的那幾條邊收集起來，再頭尾相接成迴圈。
+   方向固定（實體在同一側），所以接得起來；至於哪一圈是外框哪一圈是洞，
+   交給 contoursToShapes() 用奇偶包含去判，跟 SVG 那條路一樣。 */
+function traceMask(img){
+  const W=img.width,H=img.height,a=img.data;
+  const on=(x,y)=>x>=0&&y>=0&&x<W&&y<H&&a[(y*W+x)*4+3]>128;
+  const key=(x,y)=>y*(W+1)+x;
+  const out=new Map();
+  const push=(x0,y0,x1,y1)=>{
+    const k=key(x0,y0);
+    if(!out.has(k))out.set(k,[]);
+    out.get(k).push([x1,y1]);
+  };
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    if(!on(x,y))continue;
+    if(!on(x,y-1))push(x,y,x+1,y);
+    if(!on(x+1,y))push(x+1,y,x+1,y+1);
+    if(!on(x,y+1))push(x+1,y+1,x,y+1);
+    if(!on(x-1,y))push(x,y+1,x,y);
+  }
+  const loops=[];
+  for(const [k0,list0] of out){
+    while(list0.length){
+      const sx=k0%(W+1), sy=(k0-sx)/(W+1);
+      const pts=[[sx,sy]];
+      let [cx,cy]=list0.pop();
+      while(!(cx===sx&&cy===sy)){
+        pts.push([cx,cy]);
+        const nx=out.get(key(cx,cy));
+        if(!nx||!nx.length)break;                 // 理論上不會，保險
+        [cx,cy]=nx.pop();
+      }
+      if(pts.length>=4)loops.push(pts);
+    }
+  }
+  return loops;
+}
+
+/* 拉直：像素邊界是一格一格的階梯，直接擠出來面數會爆炸而且看得到鋸齒。
+   用 Douglas–Peucker 把在容差內的點刪掉——它保留轉角（字的直角不會被磨圓），
+   斜線和圓弧上的階梯則會被拉成一條線。用自己的堆疊，不用遞迴：
+   一圈輪廓動輒好幾千點，遞迴會爆。 */
+function simplifyPx(pts,tol){
+  const n=pts.length;
+  if(n<4)return pts;
+  const keep=new Uint8Array(n);keep[0]=1;keep[n-1]=1;
+  const st=[[0,n-1]];
+  const t2=tol*tol;
+  while(st.length){
+    const [i,j]=st.pop();
+    if(j<=i+1)continue;
+    const ax=pts[i][0],ay=pts[i][1],bx=pts[j][0],by=pts[j][1];
+    const dx=bx-ax,dy=by-ay,dd=dx*dx+dy*dy;
+    let best=-1,bi=-1;
+    for(let m=i+1;m<j;m++){
+      const px=pts[m][0]-ax,py=pts[m][1]-ay;
+      let d;
+      if(dd<1e-12)d=px*px+py*py;
+      else{const t=Math.max(0,Math.min(1,(px*dx+py*dy)/dd));
+           const ex=px-t*dx,ey=py-t*dy;d=ex*ex+ey*ey;}
+      if(d>best){best=d;bi=m;}
+    }
+    if(best>t2){keep[bi]=1;st.push([i,bi],[bi,j]);}
+  }
+  const out=[];
+  for(let m=0;m<n;m++)if(keep[m])out.push(pts[m]);
+  return out;
+}
+
+function textContours(opt){
+  const img=textMask(opt);
+  if(!img)return null;
+  // 真正的墨水範圍（字型的行高、左右留白都不算），字高就以這個為準
+  const W=img.width,H=img.height,a=img.data;
+  let mnx=1/0,mny=1/0,mxx=-1/0,mxy=-1/0;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++)
+    if(a[(y*W+x)*4+3]>128){
+      if(x<mnx)mnx=x; if(x>mxx)mxx=x;
+      if(y<mny)mny=y; if(y>mxy)mxy=y;
+    }
+  if(mxx<mnx)return null;
+  const k=opt.size/(mxy-mny+1);          // 像素 → mm
+  const tol=TXT_TOL[opt.qual]||1.0;
+  const contours=[];
+  for(const loop of traceMask(img)){
+    const sp=simplifyPx(loop,tol);
+    if(sp.length<3)continue;
+    // canvas 的 y 是往下長的，擠出去之後會上下顛倒（A 變成 ∀），所以取負
+    contours.push(sp.map(p=>new THREE.Vector2((p[0]-mnx)*k,-(p[1]-mny)*k)));
+  }
+  return contours;
+}
+
+let txtQual='mid', txtOpt={text:'文字',size:10,thick:2,bold:false};
+function txtFontNow(){
+  const sel=document.getElementById('txtFont');
+  return sel.value==='__custom'
+    ? (document.getElementById('txtFontName').value.trim()||'sans-serif')
+    : sel.value;
+}
+function txtDraw(){
+  const cv=document.getElementById('txtPrev');
+  const r=cv.getBoundingClientRect();
+  cv.width=Math.max(1,Math.round(r.width));cv.height=Math.max(1,Math.round(r.height));
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,cv.width,cv.height);
+  const bold=document.getElementById('txtBold').checked;
+  const lines=document.getElementById('txtIn').value.split(/\r?\n/).filter(l=>l.trim());
+  if(!lines.length)return;
+  const font=txtFontNow();
+  let px=40;
+  ctx.font=`${bold?'bold ':''}${px}px "${font}"`;
+  let w=1;for(const l of lines)w=Math.max(w,ctx.measureText(l).width);
+  px=Math.min(px*(cv.width-16)/w, (cv.height-12)/(lines.length*1.25));
+  px=Math.max(6,px);
+  ctx.font=`${bold?'bold ':''}${px}px "${font}"`;
+  ctx.fillStyle='#1c2129';ctx.textAlign='center';ctx.textBaseline='middle';
+  lines.forEach((l,i)=>ctx.fillText(l,cv.width/2,
+    cv.height/2+(i-(lines.length-1)/2)*px*1.25));
+}
+document.querySelectorAll('#txtQual button').forEach(b=>{
+  b.onclick=()=>{txtQual=b.dataset.q;
+    document.querySelectorAll('#txtQual button').forEach(x=>x.classList.toggle('on',x===b));};
+});
+function askText(){
+  return new Promise(res=>{
+    const bg=document.getElementById('txtDlgBg');
+    const inp=document.getElementById('txtIn'), sel=document.getElementById('txtFont');
+    const custom=document.getElementById('txtFontName');
+    const bold=document.getElementById('txtBold');
+    inp.value=txtOpt.text;
+    document.getElementById('txtSize').value=txtOpt.size;
+    document.getElementById('txtThk').value=txtOpt.thick;
+    bold.checked=txtOpt.bold;
+    bg.classList.add('on');
+    requestAnimationFrame(()=>{txtDraw();inp.focus();inp.select();});
+    const redraw=()=>{custom.style.display=sel.value==='__custom'?'block':'none';txtDraw();};
+    const done=(v,keep)=>{
+      if(!keep)bg.classList.remove('on');
+      inp.oninput=sel.onchange=custom.oninput=bold.onchange=null;
+      document.getElementById('txtOk').onclick=null;
+      document.getElementById('txtCancel').onclick=null;
+      bg.onclick=null;removeEventListener('keydown',key);
+      res(v);
+    };
+    const ok=()=>{
+      const t=parseFloat(document.getElementById('txtThk').value);
+      const z=parseFloat(document.getElementById('txtSize').value);
+      const v={text:inp.value, font:txtFontNow(),
+               size:(isFinite(z)&&z>0)?z:10,
+               thick:(isFinite(t)&&t>0)?t:2,
+               bold:bold.checked, qual:txtQual};
+      if(!v.text.trim()){inp.focus();return;}
+      txtOpt={text:v.text,size:v.size,thick:v.thick,bold:v.bold};
+      done(v,true);
+    };
+    const key=e=>{
+      if(e.key==='Escape')done(null);
+      // 文字框裡的 Enter 是換行，要按 Ctrl+Enter 才送出
+      else if(e.key==='Enter'&&(e.ctrlKey||e.metaKey||e.target!==inp))ok();
+    };
+    inp.oninput=txtDraw;sel.onchange=redraw;custom.oninput=txtDraw;
+    bold.onchange=txtDraw;
+    document.getElementById('txtOk').onclick=ok;
+    document.getElementById('txtCancel').onclick=()=>done(null);
+    bg.onclick=e=>{if(e.target===bg)done(null);};
+    addEventListener('keydown',key);
+  });
+}
+document.getElementById('btnText').onclick=async()=>{
+  const opt=await askText();
+  if(!opt)return;
+  const bg=document.getElementById('txtDlgBg');
+  bg.classList.add('wait');
+  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+  try{
+    const contours=textContours(opt);
+    if(!contours||!contours.length){
+      alert('這幾個字描不出輪廓。\n'+
+            '常見原因：選的字型電腦上沒有裝，或是只打了空白。');
+      return;
+    }
+    const tri0=extrudeShapes(contoursToShapes(contours),opt.thick);
+    const tris=tri0.length/9;
+    if(!tris)throw new Error('擠不出立體形狀');
+    if(tris>STL_HARD){
+      alert('這幾個字做出來有 '+tris.toLocaleString()+' 個面，太多了。\n'+
+            '請把「邊緣精細度」調成粗一點，或少打幾個字。');
+      return;
+    }
+    if(tris>STL_HEAVY&&!confirm(
+      '這幾個字做出來有 '+tris.toLocaleString()+' 個面，非常重。\n\n'+
+      '之後每次移動、縮放放開滑鼠都要重算好幾分鐘，\n'+
+      '算的時候畫面會完全沒反應，看起來像當掉。\n\n'+
+      '調成「粗」會少很多面。真的要放進來嗎？'))return;
+    else if(tris>STL_SOFT&&tris<=STL_HEAVY&&!confirm(
+      '這幾個字做出來有 '+tris.toLocaleString()+' 個面，算是偏重的。\n'+
+      '之後每次移動、縮放放開滑鼠都會頓幾秒。\n'+
+      '調成「粗」可以少一點面。要繼續嗎？'))return;
+
+    const {tri,size,height}=normalizeTris(tri0);
+    pushUndo();
+    const n={id:uid++,kind:'mesh',role:'solid',
+             pos:[0,Math.round(height/2*1e3)/1e3,0],rot:[0,0,0],size,
+             color:SHAPE_COLOR.mesh,
+             name:opt.text.replace(/\s+/g,' ').trim().slice(0,12),
+             tri};
+    roots.push(n);selected=[n.id];rebuild();
+  }catch(err){alert('這幾個字做不出來：'+err.message);}
+  finally{bg.classList.remove('on','wait');}
 };
 
 /* ---- 匯出 ----
