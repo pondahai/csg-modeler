@@ -125,6 +125,9 @@
   .kids{margin-left:13px;border-left:1px solid var(--line);padding-left:6px;}
   .row{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
   .row label{width:16px;color:var(--dim);}
+  /* 文字標籤的那一列（陣列複製）：X/Y/Z 那種一個字的欄寬會把它擠成直的 */
+  .row.wide label{width:auto;flex:0 0 52px;white-space:nowrap;}
+  .row.wide input{flex:1;min-width:0;}
   input[type=number]{
     width:100%;font:inherit;color:var(--text);background:var(--ink);
     border:1px solid var(--line);border-radius:4px;padding:4px 6px;
@@ -214,7 +217,7 @@
   <div class="title">加減法建模器 <span>CSG</span></div>
   <button id="btnGroup">組合</button>
   <button id="btnUngroup">拆開</button>
-  <button id="btnDup">複製</button>
+  <button id="btnDup" title="Ctrl+D：拖到定位後再按一次，會照同樣的距離一直排下去">複製</button>
   <button id="btnDel">刪除</button>
   <div class="sep"></div>
   <button id="btnUndo">上一步</button>
@@ -244,7 +247,7 @@
 </div>
 
 <aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="note" id="gNote"></div></div></aside>
-<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近</div></div>
+<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<br>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）</div></div>
 <div id="dim"></div>
 <div id="svgDlgBg"><div id="svgDlg">
   <h3>匯入 SVG</h3>
@@ -1624,9 +1627,11 @@ function ghostShow(fn){
   ghostClear();
   for(const m of selectedMeshes()){
     const M=fn(m);if(!M)continue;
-    const g=new THREE.Mesh(m.geometry,GHOST_MAT);   // 幾何體共用，不複製
-    g.matrixAutoUpdate=false;g.matrix.copy(M);
-    ghostLayer.add(g);
+    for(const one of (Array.isArray(M)?M:[M])){      // 陣列複製會一次要好幾個
+      const g=new THREE.Mesh(m.geometry,GHOST_MAT);  // 幾何體共用，不複製
+      g.matrixAutoUpdate=false;g.matrix.copy(one);
+      ghostLayer.add(g);
+    }
   }
 }
 function ghostAlign(axis,where){
@@ -1648,6 +1653,75 @@ function ghostMirror(axis){
     .multiply(new THREE.Matrix4().makeTranslation(-c.x,-c.y,-c.z));
   ghostShow(()=>M);
   addMirrorArrow(axis,c);
+}
+/* ---- 陣列複製 ----
+   跟鏡像一樣是「把已經做好的東西再生一份」，只是變換換成一連串位移。
+   間距量的是**中心到中心**，預設填選取範圍在那根軸上的長度——所以預設
+   剛好是一個接一個排排站。填負的就往反方向長。 */
+let arAxis='x', arCount=2, arStep=null;   // arStep=null 代表「照預設」
+function arrayStep(){
+  if(arStep!==null)return arStep;
+  const b=selBox();if(!b)return 20;
+  return Math.round(b.getSize(new THREE.Vector3())[arAxis]*10)/10||20;
+}
+function arrayOffsets(){
+  const k=['x','y','z'].indexOf(arAxis), d=arrayStep(), out=[];
+  for(let i=1;i<=arCount;i++){const t=[0,0,0];t[k]=Math.round(i*d*100)/100;out.push(t);}
+  return out;
+}
+function ghostArray(){
+  const offs=arrayOffsets();
+  ghostShow(()=>offs.map(t=>
+    new THREE.Matrix4().makeTranslation(t[0],t[1],t[2])));
+}
+function arraySel(){
+  if(!selected.length||arCount<1)return;
+  const src=roots.filter(n=>selected.includes(n.id));
+  if(!src.length)return;
+  pushUndo();
+  const made=[];
+  for(const t of arrayOffsets()){
+    for(const n of src){
+      const c=JSON.parse(JSON.stringify(n));
+      renumber(c);
+      c.pos=c.pos.map((v,i)=>Math.round((v+t[i])*100)/100);
+      made.push(c);
+    }
+  }
+  roots=roots.concat(made);
+  selected=made.map(n=>n.id);
+  ghostClear();rebuild();
+}
+function arrayHtml(){
+  const seg=(ax,t)=>`<button data-arax="${ax}" class="${arAxis===ax?'on':''}">${t}</button>`;
+  return `<div class="grp"><h2>陣列複製</h2></div>
+    <div class="seg">${seg('x','左右')}${seg('y','上下')}${seg('z','前後')}</div>
+    <div class="row wide"><label>再幾份</label>
+      <input type="number" id="arN" step="1" min="1" max="200" value="${arCount}"></div>
+    <div class="row wide"><label>間距 mm</label>
+      <input type="number" id="arD" step="1" value="${arrayStep()}"></div>
+    <button id="arGo" style="width:100%">複製出來</button>`;
+}
+function hookArray(host){
+  const nEl=host.querySelector('#arN'), dEl=host.querySelector('#arD');
+  if(!nEl)return;
+  host.querySelectorAll('[data-arax]').forEach(b=>b.onclick=()=>{
+    arAxis=b.dataset.arax;arStep=null;                 // 換軸就回到那根軸的預設間距
+    host.querySelectorAll('[data-arax]').forEach(x=>
+      x.classList.toggle('on',x.dataset.arax===arAxis));
+    dEl.value=arrayStep();ghostArray();
+  });
+  nEl.oninput=()=>{
+    arCount=Math.max(1,Math.min(200,Math.round(parseFloat(nEl.value)||1)));
+    ghostArray();
+  };
+  dEl.oninput=()=>{arStep=parseFloat(dEl.value)||0;ghostArray();};
+  const go=host.querySelector('#arGo');
+  go.onclick=arraySel;
+  go.onpointerenter=ghostArray;
+  // 滑出整個陣列那一區才收掉鬼影，在裡面調數字的時候要一直看得到
+  const grp=[nEl,dEl,go,...host.querySelectorAll('[data-arax]')];
+  grp.forEach(el=>el.onpointerenter=el.onpointerenter||ghostArray);
 }
 // 雙頭箭頭：告訴你會沿哪個方向翻。長度照選取範圍走，太小的時候有下限。
 function addMirrorArrow(axis,c){
@@ -1690,6 +1764,7 @@ function drawInspector(){
         <div class="seg">${btn('y',-1,'下')}${btn('y',0,'中')}${btn('y',1,'上')}</div>
         <div class="grp"><h2>鏡像（繞整包的中心翻）</h2></div>
         <div class="seg">${mbtn('x','左右')}${mbtn('y','上下')}${mbtn('z','前後')}</div>
+        ${arrayHtml()}
         <div class="grp"></div>
         <button id="doGroup" style="width:100%">組合成一個</button>`;
       host.querySelectorAll('[data-ax]').forEach(b=>{
@@ -1697,7 +1772,7 @@ function drawInspector(){
         b.onpointerenter=()=>ghostAlign(b.dataset.ax,+b.dataset.w);
         b.onpointerleave=ghostClear;
       });
-      hookMirror(host);
+      hookMirror(host);hookArray(host);
       document.getElementById('doGroup').onclick=()=>
         document.getElementById('btnGroup').click();
     } else {
@@ -1741,9 +1816,10 @@ function drawInspector(){
       <button data-mir="y">上下</button>
       <button data-mir="z">前後</button>
     </div>
+    ${arrayHtml()}
     <div class="grp"><h2>放到地面</h2></div>
     <button id="drop" style="width:100%">貼齊工作平面</button>`;
-  hookMirror(host);
+  hookMirror(host);hookArray(host);
   host.querySelectorAll('input[type=number]').forEach(inp=>{
     inp.onchange=()=>{pushUndo();
       let v=parseFloat(inp.value)||0;
@@ -1873,14 +1949,39 @@ document.getElementById('btnUngroup').onclick=()=>{
   roots=roots.filter(n=>!gs.includes(n)).concat(out);
   selected=out.map(n=>n.id);rebuild();
 };
-document.getElementById('btnDup').onclick=()=>{
-  if(!selected.length)return;pushUndo();
-  const copies=roots.filter(n=>selected.includes(n.id)).map(n=>{
+/* 複製（Ctrl+D）：跟 Tinkercad 一樣會「接著上一次的偏移長下去」。
+
+   第一次複製往右前方挪 10mm；把那份拖到你要的位置之後，再按一次 Ctrl+D，
+   新的一份就會照「這一份離它的來源有多遠」再走一次同樣的距離。所以
+   「複製 → 拖到定位 → Ctrl+D Ctrl+D Ctrl+D」就排出一整排等距的東西。
+
+   記法是 dupChain：上一批複製出來的 id，以及每一份「來源當時在哪」。
+   選取的東西跟那一批對不起來（點了別的、刪掉了、中間做了別的事），
+   就回到預設的 10mm，不要把上一串的節奏硬套到不相干的東西上。 */
+let dupChain=null;
+function duplicateSel(){
+  const src=roots.filter(n=>selected.includes(n.id));
+  if(!src.length)return;
+  const ids=src.map(n=>n.id).sort((a,b)=>a-b);
+  const chained=dupChain&&dupChain.ids.length===ids.length&&
+                dupChain.ids.every((v,i)=>v===ids[i]);
+  pushUndo();
+  const copies=[],from={};
+  for(const n of src){
+    const d=chained?n.pos.map((v,i)=>Math.round((v-dupChain.from[n.id][i])*100)/100)
+                   :[10,0,10];
     const c=JSON.parse(JSON.stringify(n));
-    const renum=x=>{x.id=uid++;if(x.children)x.children.forEach(renum);};
-    renum(c);c.pos[0]+=10;c.pos[2]+=10;return c;});
-  roots=roots.concat(copies);selected=copies.map(c=>c.id);rebuild();
-};
+    renumber(c);
+    c.pos=c.pos.map((v,i)=>Math.round((v+d[i])*100)/100);
+    from[c.id]=n.pos.slice();      // 這一份的來源當時在哪
+    copies.push(c);
+  }
+  roots=roots.concat(copies);
+  selected=copies.map(c=>c.id);
+  dupChain={ids:selected.slice().sort((a,b)=>a-b),from};
+  ghostClear();rebuild();
+}
+document.getElementById('btnDup').onclick=duplicateSel;
 document.getElementById('btnDel').onclick=()=>{
   if(!selected.length)return;pushUndo();
   roots=roots.filter(n=>!selected.includes(n.id));selected=[];rebuild();
@@ -1899,6 +2000,7 @@ addEventListener('keydown',e=>{
   if(e.target.tagName==='INPUT')return;
   const k=e.key.toLowerCase();
   if((e.ctrlKey||e.metaKey)&&k==='z'){e.preventDefault();e.shiftKey?redo():undo();}
+  if((e.ctrlKey||e.metaKey)&&k==='d'){e.preventDefault();duplicateSel();}
   if((e.ctrlKey||e.metaKey)&&k==='g'){e.preventDefault();
     document.getElementById(e.shiftKey?'btnUngroup':'btnGroup').click();}
   if(k==='delete'||k==='backspace')document.getElementById('btnDel').click();
