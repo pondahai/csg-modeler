@@ -78,6 +78,21 @@
   #treeBody{flex:1;overflow-y:auto;min-height:0;}
   #insp{grid-area:insp;border-left:1px solid var(--line);padding:10px;}
   #view{grid-area:view;position:relative;}
+  /* 收起側邊面板：整欄寬度收成 0，畫面自己補上去 */
+  body.noTree{grid-template-columns:0 1fr 232px;}
+  body.noInsp{grid-template-columns:250px 1fr 0;}
+  body.noTree.noInsp{grid-template-columns:0 1fr 0;}
+  body.noTree #tree,body.noInsp #insp{display:none;}
+  /* 收合把手：貼在畫面左右邊緣，收起來之後還看得到，才點得回來 */
+  .tgl{
+    position:absolute;top:10px;z-index:7;
+    width:20px;height:38px;padding:0;line-height:1;
+    background:var(--panel-2);border:1px solid var(--line);color:var(--dim);
+    font-size:11px;cursor:pointer;opacity:.85;
+  }
+  .tgl:hover{opacity:1;color:var(--text);}
+  #tglTree{left:0;border-left:none;border-radius:0 6px 6px 0;}
+  #tglInsp{right:0;border-right:none;border-radius:6px 0 0 6px;}
   canvas{display:block;}
   h2{font-size:11px;color:var(--dim);font-weight:600;margin:0 0 8px;letter-spacing:.06em;}
   .node{
@@ -148,6 +163,32 @@
     font:inherit;font-size:12px;padding:3px 10px;cursor:pointer;
   }
   #busyStop:hover{background:#443714;}
+  /* SVG 匯入的小視窗：問厚度和曲線精細度 */
+  #svgDlgBg{
+    position:fixed;inset:0;z-index:30;display:none;
+    background:rgba(0,0,0,.45);align-items:center;justify-content:center;
+  }
+  #svgDlgBg.on{display:flex;}
+  #svgDlg{
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:16px 18px;width:330px;box-shadow:0 10px 40px rgba(0,0,0,.5);
+  }
+  #svgDlg h3{margin:0 0 4px;font-size:14px;}
+  #svgDlg .sub{color:var(--dim);font-size:11px;margin-bottom:12px;
+               white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #svgDlg .lab{color:var(--dim);font-size:11px;margin:10px 0 5px;}
+  #svgDlg .tip{color:var(--dim);font-size:11px;margin-top:6px;line-height:1.4;}
+  #svgDlg .seg button{padding:6px 0;font-size:12px;}
+  #svgDlg .seg{margin-bottom:0;}
+  #svgDlg .foot{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
+  #svgThk{width:80px;}
+  #svgWait{
+    display:none;background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:18px 22px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.5);
+  }
+  #svgWait span{color:var(--dim);font-size:11px;}
+  #svgDlgBg.wait #svgDlg{display:none;}
+  #svgDlgBg.wait #svgWait{display:block;}
 </style>
 </head>
 <body>
@@ -176,6 +217,7 @@
       <div class="head">放東西進來</div>
       <button id="btnPlace">插入元件（存檔）</button>
       <button id="btnImportStl">匯入 STL</button>
+      <button id="btnImportSvg">匯入 SVG（平面圖形）</button>
       <div class="head">送出去列印／給別的軟體</div>
       <button id="btnStl">匯出 STL</button>
       <button id="btnObj">匯出 OBJ</button>
@@ -184,11 +226,31 @@
   <input type="file" id="fileIn" accept=".json,.csg" style="display:none">
   <input type="file" id="filePlace" accept=".json,.csg" style="display:none">
   <input type="file" id="fileStl" accept=".stl" style="display:none">
+  <input type="file" id="fileSvg" accept=".svg,image/svg+xml" style="display:none">
 </div>
 
 <aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="note" id="gNote"></div></div></aside>
-<div id="view"><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>右鍵拖＝轉視角　中鍵拖＝平移（沒有中鍵就按住 Alt 拖）</div></div>
+<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>右鍵拖＝轉視角　中鍵拖＝平移（沒有中鍵就按住 Alt 拖）</div></div>
 <div id="dim"></div>
+<div id="svgDlgBg"><div id="svgDlg">
+  <h3>匯入 SVG</h3>
+  <div class="sub" id="svgName"></div>
+  <div class="lab">厚度（mm）</div>
+  <input type="number" id="svgThk" value="2" min="0.1" step="0.5">
+  <div class="lab">曲線精細度</div>
+  <div class="seg" id="svgQual">
+    <button data-q="coarse">粗</button>
+    <button data-q="mid" class="on">中</button>
+    <button data-q="fine">細</button>
+  </div>
+  <div class="tip" id="svgTip">圓弧會切成小直線。切得越細越圓滑，但面數越多、之後每次重算越慢。</div>
+  <div class="foot">
+    <button id="svgCancel">取消</button>
+    <button id="svgOk">放進來</button>
+  </div>
+</div>
+<div id="svgWait">正在把圖形變成立體…<br><span>描圖來的圖案線條很多，可能要等幾秒</span></div>
+</div>
 <aside id="insp"><h2>屬性</h2><div id="inspBody"></div></aside>
 
 <script>
@@ -632,6 +694,15 @@ function resize(){
   camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);
 }
 addEventListener('resize',resize);
+
+/* ---- 收起／展開左右面板 ---- */
+function setPanel(cls,btn,openArrow,shutArrow){
+  const shut=document.body.classList.toggle(cls);
+  btn.textContent=shut?shutArrow:openArrow;
+  resize();
+}
+tglTree.onclick=()=>setPanel('noTree',tglTree,'◀','▶');
+tglInsp.onclick=()=>setPanel('noInsp',tglInsp,'▶','◀');
 
 /* ---- 重建畫面 ---- */
 const meshes=[];
@@ -1350,26 +1421,76 @@ document.getElementById('btnGroup').onclick=()=>{
            pos:[0,0,0],rot:[0,0,0],size:[1,1,1],children:kids};
   roots.push(g);selected=[g.id];rebuild();
 };
-// 拆開：把 children 拿回最上層，順便把組合本身的變換烘進去
+/* 拆開：把 children 拿回最上層，順便把組合本身的變換烘進去。
+
+   這裡曾經有一個會讓形狀突變的坑：矩陣的排法是 位移 · post · 旋轉 · size，
+   如果零件「轉斜了又被拉伸過」（post 不是 1），那個矩陣帶著**歪斜**，
+   而 decompose() 只拆得出 位移／旋轉／尺寸 三件事——拆不出歪斜，
+   它會給一個「最接近」的答案，於是拆開之後形狀就跳掉了。
+   實際症狀：轉 45 度又斜拉過的方塊，組合再拆開，變成 43.9 度、尺寸也全變。
+
+   修法分兩條路：
+   - **組合自己只是被搬過**（沒轉、沒縮放、沒斜拉，剛做好的組合就是這樣）：
+     零件的 rot/size/post 原封不動帶走，只把位移加上去。永遠精確，post 保住。
+   - **組合自己被轉過或拉過**：還是只能 decompose。但先算一遍、把算出來的值
+     重組成矩陣跟原本比對，對不起來就先問過使用者，不要默默把形狀改掉。 */
 document.getElementById('btnUngroup').onclick=()=>{
   const gs=roots.filter(n=>selected.includes(n.id)&&n.kind==='group');
   if(!gs.length)return;
-  pushUndo();
-  const out=[];
+
+  const plan=[];
   for(const g of gs){
+    // 組合本身只是被搬過？那零件的一切都可以原封不動帶走
+    const moved=g.rot.every(v=>!v)&&g.size.every(v=>v===1)&&!postOf(g);
     const G=matrixOf(g);
     for(const c of g.children){
+      if(moved){
+        plan.push({c,keep:true,pos:c.pos.map((v,i)=>v+g.pos[i]),exact:true});
+        continue;
+      }
       const M=new THREE.Matrix4().multiplyMatrices(G,matrixOf(c));
-      // 分解不出斜拉，所以拆開之後 post 就地歸零（形狀已經烘進 size/rot 裡）
-      delete c.post;
       const p=new THREE.Vector3(),q=new THREE.Quaternion(),s=new THREE.Vector3();
       M.decompose(p,q,s);
       const e=new THREE.Euler().setFromQuaternion(q,'XYZ');
-      c.pos=[p.x,p.y,p.z];
-      c.rot=[e.x,e.y,e.z].map(v=>Math.round(THREE.MathUtils.radToDeg(v)*100)/100);
-      c.size=[s.x,s.y,s.z].map(v=>Math.round(v*1000)/1000);
-      out.push(c);
+      const it={c,keep:false,
+        pos:[p.x,p.y,p.z],
+        rot:[e.x,e.y,e.z].map(v=>Math.round(THREE.MathUtils.radToDeg(v)*100)/100),
+        size:[s.x,s.y,s.z].map(v=>Math.round(v*1000)/1000)};
+      // 拿算出來的值重組一次矩陣，跟原本的比：差太多就是拆不準
+      const chk=matrixOf({pos:it.pos,rot:it.rot,size:it.size});
+      it.exact=M.elements.every((v,k)=>
+        Math.abs(v-chk.elements[k])<1e-3*(1+Math.abs(v)));
+      plan.push(it);
     }
+  }
+
+  const bad=plan.filter(x=>!x.exact).length;
+  if(bad&&!confirm(
+      `這個組合本身被轉過或拉過，裡面有 ${bad} 個零件是「轉斜之後又拉伸」的。
+
+`+
+      `這兩件事疊在一起會讓形狀帶著歪斜，而拆開之後每個零件只能記
+`+
+      `位置、角度、長寬高三件事，記不住歪斜——所以那幾個零件拆出來
+`+
+      `會跟現在**長得不一樣**。
+
+`+
+      `如果不想變形，可以先把組合自己的旋轉和尺寸歸零再拆。
+
+`+
+      `還是要拆開嗎？`))return;
+
+  pushUndo();
+  const out=[];
+  for(const it of plan){
+    const c=it.c;
+    c.pos=it.pos;
+    if(!it.keep){
+      c.rot=it.rot;c.size=it.size;
+      delete c.post;      // 歪斜已經（盡量）烘進 rot/size 了，post 不能再留著
+    }
+    out.push(c);
   }
   roots=roots.filter(n=>!gs.includes(n)).concat(out);
   selected=out.map(n=>n.id);rebuild();
@@ -1661,6 +1782,295 @@ document.getElementById('fileStl').onchange=e=>{
   r.onerror=()=>alert('檔案讀取失敗。');
   r.readAsArrayBuffer(f);
   e.target.value='';
+};
+
+/* ---- 匯入 SVG ----
+   SVG 是平面圖形，沒有厚度，所以匯進來時問一個厚度（預設 2mm）擠出成立體。
+   擠出來的結果就是三角形，直接存成 kind:'mesh'，跟匯入的 STL 走完全同一條路：
+   可以當孔洞、可以組合、可以存檔、可逆。不需要新的節點型別。
+
+   為什麼不自己寫路徑解析器：瀏覽器本身就會解析 SVG。把 SVG 掛進畫面（藏起來），
+   用 SVGGeometryElement 的 getPointAtLength() 就能把任何路徑取樣成點，
+   圓弧、貝茲、rect/circle/polygon 全部通吃，連元素身上的 transform 都算好了。
+
+   多重子路徑（一個 <path> 裡有好幾個 M）不能直接整條取樣，那會把不同的圈接成
+   一條線。作法是先把 d 拆成一段一段，用「前綴路徑」的累計長度找出每一段在整條
+   路徑上的長度區間，再回到完整路徑上取樣那個區間——這樣相對座標（小寫 m）也不
+   會算錯，因為始終是同一個 path 元素在算。
+
+   三角化和擠出交給 three.js 核心裡就有的 Shape / ExtrudeGeometry，含內孔。
+   內外圈用「奇偶包含」判定：被奇數個圈包住的就是洞（字母 O 的內圈），
+   再把每個洞掛到「包住它、而且最小的」那個外圈上。 */
+
+const SVG_TOL={coarse:1.0, mid:0.3, fine:0.1};   // 每一小段大約幾 mm
+const SVG_DEFAULT_MM=50;                          // 沒寫尺寸時，長邊當成幾 mm
+
+// 把 "50mm" / "200px" / "3in" 換算成 mm；沒有單位就當 px（96dpi）
+function svgLenMm(v){
+  if(!v)return null;
+  const m=/^\s*(-?[\d.]+)\s*([a-z%]*)\s*$/i.exec(v);
+  if(!m)return null;
+  const n=parseFloat(m[1]);
+  if(!isFinite(n)||n<=0)return null;
+  const u={mm:1,cm:10,q:.25,in:25.4,pt:25.4/72,pc:25.4/6,px:25.4/96,'':25.4/96}[m[2].toLowerCase()];
+  return u?n*u:null;
+}
+
+function pointInPoly(pt,poly){
+  let inside=false;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const a=poly[i],b=poly[j];
+    if((a.y>pt.y)!==(b.y>pt.y) &&
+       pt.x < (b.x-a.x)*(pt.y-a.y)/(b.y-a.y)+a.x) inside=!inside;
+  }
+  return inside;
+}
+function polyArea(p){
+  let a=0;
+  for(let i=0,j=p.length-1;i<p.length;j=i++)a+=(p[j].x+p[i].x)*(p[j].y-p[i].y);
+  return a/2;
+}
+
+/* 讀出 SVG 裡所有封閉輪廓，座標單位是 mm，y 已經翻正（SVG 的 y 是往下的）。
+   回傳 {contours, strokeOnly} */
+function parseSVG(text,tolMm){
+  const doc=new DOMParser().parseFromString(text,'image/svg+xml');
+  if(doc.querySelector('parsererror'))throw new Error('這不是一個看得懂的 SVG 檔');
+  const svg=doc.documentElement;
+  if(!svg||svg.nodeName.toLowerCase()!=='svg')throw new Error('這不是一個看得懂的 SVG 檔');
+
+  // 掛進畫面才算得出長度；藏在畫面外，不能用 display:none（那樣量不到）
+  const host=document.createElement('div');
+  host.style.cssText='position:absolute;left:-99999px;top:0;width:0;height:0;overflow:hidden';
+  const node=document.importNode(svg,true);
+  host.appendChild(node);document.body.appendChild(host);
+
+  try{
+    // 使用者單位換算成 mm
+    const vb=(node.getAttribute('viewBox')||'').trim().split(/[\s,]+/).map(Number);
+    const hasVB=vb.length===4&&vb.every(isFinite)&&vb[2]>0&&vb[3]>0;
+    const wMm=svgLenMm(node.getAttribute('width')),hMm=svgLenMm(node.getAttribute('height'));
+    let mmPerUnit;
+    if(hasVB&&wMm)      mmPerUnit=wMm/vb[2];
+    else if(hasVB&&hMm) mmPerUnit=hMm/vb[3];
+    else if(hasVB)      mmPerUnit=SVG_DEFAULT_MM/Math.max(vb[2],vb[3]);
+    else                mmPerUnit=25.4/96;          // 沒有 viewBox：使用者單位就是 px
+    node.setAttribute('width', hasVB?vb[2]:100);    // 固定住，免得被 100% 撐爛
+    node.setAttribute('height',hasVB?vb[3]:100);
+
+    const rootCTM=node.getScreenCTM();
+    if(!rootCTM)throw new Error('這個 SVG 量不到座標');
+    const inv=rootCTM.inverse();
+
+    const sel='path,rect,circle,ellipse,polygon,polyline,line';
+    const els=[...node.querySelectorAll(sel)].filter(el=>
+      !el.closest('defs,clipPath,mask,marker,symbol,pattern') &&
+      typeof el.getTotalLength==='function');
+
+    // 有填色的才算圖形；整張都沒填色（雷切線稿）就退而求其次，全部當外框
+    const filled=el=>{
+      const st=getComputedStyle(el);
+      if(st.display==='none'||st.visibility==='hidden')return false;
+      const f=st.fill;
+      return !!f&&f!=='none'&&!/^rgba\([^)]*,\s*0\)$/.test(f);
+    };
+    let use=els.filter(filled), strokeOnly=false;
+    if(!use.length){use=els;strokeOnly=true;}
+
+    const contours=[];
+    const tolU=Math.max(tolMm/mmPerUnit,1e-4);
+
+    const sample=(el,from,to,m)=>{
+      const lenU=to-from;
+      if(lenU<=tolU*0.5)return;
+      const n=Math.max(3,Math.min(20000,Math.ceil(lenU/tolU)));
+      const out=[];
+      for(let i=0;i<n;i++){
+        // 取每一小段的「中點」：正好踩在子路徑的接縫上時，瀏覽器會回傳
+        // 上一段的終點，那個點會落在別的輪廓邊界上，內外圈就判錯了
+        const p=el.getPointAtLength(from+lenU*(i+0.5)/n);
+        // 套上元素自己的 transform，換算到 SVG 根座標
+        const x=m.a*p.x+m.c*p.y+m.e, y=m.b*p.x+m.d*p.y+m.f;
+        const v=new THREE.Vector2(x*mmPerUnit,-y*mmPerUnit);   // y 翻正
+        const q=out[out.length-1];
+        if(!q||Math.abs(q.x-v.x)>1e-9||Math.abs(q.y-v.y)>1e-9)out.push(v);
+      }
+      if(out.length>=3&&Math.abs(polyArea(out))>1e-8)contours.push(out);
+    };
+
+    for(const el of use){
+      const scr=el.getScreenCTM();
+      if(!scr)continue;
+      const m=inv.multiply(scr);
+      let total=0;
+      try{total=el.getTotalLength();}catch(_){continue;}
+      if(!(total>0))continue;
+
+      const d=el.nodeName.toLowerCase()==='path'?(el.getAttribute('d')||''):'';
+      const parts=d?d.split(/(?=[Mm])/).filter(t=>t.trim()):[];
+      if(parts.length>1){
+        // 多重子路徑：用前綴路徑的累計長度切出每一段的區間
+        const tmp=document.createElementNS('http://www.w3.org/2000/svg','path');
+        el.parentNode.appendChild(tmp);
+        let acc='',prev=0;
+        for(const seg of parts){
+          acc+=seg;
+          tmp.setAttribute('d',acc);
+          let L;
+          try{L=tmp.getTotalLength();}catch(_){L=total;}
+          if(!isFinite(L))L=total;
+          sample(el,prev,Math.min(L,total),m);
+          prev=L;
+          if(prev>=total)break;
+        }
+        tmp.remove();
+      } else {
+        sample(el,0,total,m);
+      }
+    }
+    return {contours,strokeOnly};
+  } finally { host.remove(); }
+}
+
+/* 把一堆輪廓依「奇偶包含」分成外框和內孔，做成 THREE.Shape */
+function contoursToShapes(contours){
+  const info=contours.map(c=>({pts:c,area:Math.abs(polyArea(c)),depth:0,holes:[]}));
+  // 取三個點投票，免得剛好踩在別人的邊上判錯
+  const inside=(a,b)=>{
+    let k=0;
+    for(const t of [0,1/3,2/3])
+      if(pointInPoly(a.pts[Math.floor(a.pts.length*t)],b.pts))k++;
+    return k>=2;
+  };
+  for(const a of info)
+    for(const b of info)
+      if(a!==b&&b.area>a.area&&inside(a,b))a.depth++;
+
+  const outers=info.filter(c=>c.depth%2===0);
+  if(!outers.length)return [];
+  for(const h of info.filter(c=>c.depth%2===1)){
+    let best=null;
+    for(const o of outers)
+      if(o.area>h.area&&inside(h,o)&&(!best||o.area<best.area))best=o;
+    (best||outers[0]).holes.push(h);
+  }
+
+  const shapes=[];
+  for(const o of outers){
+    const outer=polyArea(o.pts)<0?o.pts.slice().reverse():o.pts;   // 外框逆時針
+    const sh=new THREE.Shape(outer);
+    for(const h of o.holes){
+      const hp=polyArea(h.pts)>0?h.pts.slice().reverse():h.pts;    // 內孔順時針
+      sh.holes.push(new THREE.Path(hp));
+    }
+    shapes.push(sh);
+  }
+  return shapes;
+}
+
+// 擠出成立體，回傳世界座標的三角形陣列（Y 軸朝上，厚度沿 Y）
+function extrudeShapes(shapes,thick){
+  let geo=new THREE.ExtrudeGeometry(shapes,{depth:thick,bevelEnabled:false,curveSegments:1});
+  if(geo.index){const g2=geo.toNonIndexed();geo.dispose();geo=g2;}
+  geo.rotateX(-Math.PI/2);           // 平躺在地上，厚度朝上
+  const a=geo.attributes.position.array;
+  const out=new Array(a.length);
+  for(let i=0;i<a.length;i++)out[i]=a[i];
+  geo.dispose();
+  return out;
+}
+
+/* ---- 匯入 SVG 的小視窗：問厚度和曲線精細度 ---- */
+let svgQual='mid';
+document.querySelectorAll('#svgQual button').forEach(b=>{
+  b.onclick=()=>{
+    svgQual=b.dataset.q;
+    document.querySelectorAll('#svgQual button').forEach(x=>x.classList.toggle('on',x===b));
+  };
+});
+function askSvg(name){
+  return new Promise(res=>{
+    const bg=document.getElementById('svgDlgBg');
+    document.getElementById('svgName').textContent=name;
+    bg.classList.add('on');
+    const done=(v,keep)=>{
+      if(!keep)bg.classList.remove('on');
+      document.getElementById('svgOk').onclick=null;
+      document.getElementById('svgCancel').onclick=null;
+      bg.onclick=null;removeEventListener('keydown',key);
+      res(v);
+    };
+    const ok=()=>{
+      const t=parseFloat(document.getElementById('svgThk').value);
+      done({thick:(isFinite(t)&&t>0)?t:2, qual:svgQual}, true);
+    };
+    const key=e=>{
+      if(e.key==='Escape')done(null);
+      else if(e.key==='Enter')ok();
+    };
+    document.getElementById('svgOk').onclick=ok;
+    document.getElementById('svgCancel').onclick=()=>done(null);
+    bg.onclick=e=>{if(e.target===bg)done(null);};
+    addEventListener('keydown',key);
+  });
+}
+
+document.getElementById('btnImportSvg').onclick=()=>document.getElementById('fileSvg').click();
+document.getElementById('fileSvg').onchange=e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;
+  const r=new FileReader();
+  r.onload=async()=>{
+    const opt=await askSvg(f.name);
+    if(!opt)return;
+    // 描圖來的 SVG 線條很多，光是量長度就要好幾秒。先把「處理中」畫出來，
+    // 不然使用者按完「放進來」會對著沒反應的畫面以為壞掉了。
+    const bg=document.getElementById('svgDlgBg');
+    bg.classList.add('wait');
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    try{
+      const {contours,strokeOnly}=parseSVG(r.result,SVG_TOL[opt.qual]);
+      if(!contours.length){
+        alert('這個 SVG 裡面找不到可以擠出來的圖形。\n'+
+              '常見原因：整張都是文字（沒有轉成外框），或是圖形沒有封閉起來。\n'+
+              '請在畫圖的軟體裡把文字「建立外框」之後再存一次。');
+        return;
+      }
+      if(strokeOnly&&!confirm(
+        '這個 SVG 只有線條、沒有填色（雷切檔常見）。\n\n'+
+        '我會把每一條線當成封閉的外框直接擠出來。\n'+
+        '如果線本來就沒有接起來，出來的形狀可能怪怪的。\n\n要繼續嗎？'))return;
+
+      const tri0=extrudeShapes(contoursToShapes(contours),opt.thick);
+      const tris=tri0.length/9;
+      if(!tris)throw new Error('擠不出立體形狀，圖形可能沒有封閉');
+      if(tris>STL_HARD){
+        alert('這個圖形做出來有 '+tris.toLocaleString()+' 個面，太細了。\n'+
+              '請把「曲線精細度」調成粗一點再試一次，或簡化圖案。');
+        return;
+      }
+      if(tris>STL_HEAVY&&!confirm(
+        '這個圖形做出來有 '+tris.toLocaleString()+' 個面，非常重。\n\n'+
+        '每次移動、縮放放開滑鼠都要重算一次，可能要等好幾分鐘，\n'+
+        '算的時候畫面會完全沒反應，看起來像當掉。\n\n'+
+        '調成「粗」會少很多面。真的要放進來嗎？'))return;
+      else if(tris>STL_SOFT&&tris<=STL_HEAVY&&!confirm(
+        '這個圖形做出來有 '+tris.toLocaleString()+' 個面，算是偏重的。\n'+
+        '之後每次移動、縮放放開滑鼠都會頓幾秒。\n'+
+        '調成「粗」可以少一點面。要繼續嗎？'))return;
+
+      const {tri,size,height}=normalizeTris(tri0);
+      pushUndo();
+      const n={id:uid++,kind:'mesh',role:'solid',
+               pos:[0,height/2,0],rot:[0,0,0],size,
+               color:SHAPE_COLOR.mesh,
+               name:f.name.replace(/\.svg$/i,''),
+               tri};
+      roots.push(n);selected=[n.id];rebuild();
+    }catch(err){alert('這個 SVG 讀不進來：'+err.message);}
+    finally{bg.classList.remove('on','wait');}
+  };
+  r.onerror=()=>alert('檔案讀取失敗。');
+  r.readAsText(f);
 };
 
 /* ---- 匯出 ----
