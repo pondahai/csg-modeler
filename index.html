@@ -221,6 +221,7 @@
       <div class="head">送出去列印／給別的軟體</div>
       <button id="btnStl">匯出 STL</button>
       <button id="btnObj">匯出 OBJ</button>
+      <button id="btnSvg">匯出 SVG（雷切剖面）</button>
     </div>
   </div>
   <input type="file" id="fileIn" accept=".json,.csg" style="display:none">
@@ -641,6 +642,21 @@ const dir=new THREE.DirectionalLight(0xffffff,.5);dir.position.set(60,110,80);sc
 
 const grid=new THREE.GridHelper(400,40,0xa9a08a,0xd6cdb6);
 grid.material.transparent=true;grid.material.opacity=.75;scene.add(grid);
+
+/* 工作平面的「有色玻璃」。匯出 SVG 切的就是這一層，所以要看得出物件
+   有沒有穿過去、穿到哪裡。
+   - 不寫深度（depthWrite=false）：玻璃只上色、不擋住後面的東西的深度，
+     所以沉在平面下方的部分會透出藍色，浮在上方的部分維持原色——一眼就
+     看得出剖面切在哪。
+   - 壓在格線下面一點點（-0.02），不然會跟格線互相閃爍（z-fighting）。
+   - 用 MeshBasicMaterial（不吃光）：吃光的話會隨角度忽明忽暗，看起來像
+     另一個實體，反而不像玻璃。
+   - 沒有加進 meshes／handles，所以點不到它，不會干擾選取。 */
+const glass=new THREE.Mesh(
+  new THREE.PlaneGeometry(400,400),
+  new THREE.MeshBasicMaterial({color:0x2f9fd0,transparent:true,opacity:.22,
+                               side:THREE.DoubleSide,depthWrite:false}));
+glass.rotation.x=-Math.PI/2;glass.position.y=-0.02;scene.add(glass);
 
 const objLayer=new THREE.Group();scene.add(objLayer);
 const helpLayer=new THREE.Group();scene.add(helpLayer);
@@ -2178,6 +2194,184 @@ document.getElementById('btnObj').onclick=()=>{
   startJob(my=>objG(my),`匯出 OBJ（${exportScopeLabel()}）`,blob=>{
     if(!blob){alert('沒有可以匯出的實體。\n（最上層的孔洞不會被匯出，要先跟實體組合起來。）');return;}
     download('model.obj',blob);
+  });
+};
+
+/* ---- 匯出 SVG（雷射切割）----
+   跟 Tinkercad 一致：取「模型與工作平面相交」的那一層剖面，不是從上往下
+   壓扁的投影。所以要切哪一層，就把模型上下移動去碰工作平面——這也是
+   Tinkercad 的用法（同一個模型移到不同高度，可以匯出外框、再匯出內部的
+   刻痕）。專案擁有者確認過要照這條路走，不要改成投影輪廓。
+
+   投影法看起來比較「聰明」，但它得把一堆重疊的輪廓做布林聯集，貴又容易破；
+   剖面法只要拿每個三角形去跟平面求交線段，再把線段接成封閉迴圈就好，
+   而且完全不用跑布林運算——畫面上算好的幾何體直接拿來切。
+
+   切到的線一律當「切穿」，畫成紅色（雷切軟體辨識切穿的慣例顏色），
+   不分刻痕。所以輸出只有線、沒有填色，內外圈的繞行方向就不重要了。
+
+   切的高度故意抬高 SLICE_Y 這麼一點點，不是切在正 0：物件預設是「坐在」
+   工作平面上的，底面剛好跟平面重合，切在正 0 會切到一個退化的面、什麼都
+   得不到。抬高千分之一毫米之後，坐在平面上的東西就會乖乖給出它的底面輪廓。 */
+const SLICE_Y=1e-3;
+
+// 把三角形跟 y=SLICE_Y 的平面求交，得到一堆散亂的線段
+function* sliceSegsG(my,parts){
+  const segs=[];
+  for(const {geo} of parts){
+    const p=geo.attributes.position;
+    for(let i=0;i<p.count;i+=3){
+      if(i%WRITE_CHUNK===0)yield;
+      const x=[],y=[],z=[];
+      for(let k=0;k<3;k++){x.push(p.getX(i+k));y.push(p.getY(i+k));z.push(p.getZ(i+k));}
+      // 剛好落在平面上的點推到平面上方，免得切出長度為零的碎線
+      const d=y.map(v=>{const t=v-SLICE_Y;return Math.abs(t)<1e-9?1e-9:t;});
+      const hit=[];
+      for(let k=0;k<3;k++){
+        const a=k,b=(k+1)%3;
+        if((d[a]>0)!==(d[b]>0)){
+          const t=d[a]/(d[a]-d[b]);
+          hit.push([x[a]+(x[b]-x[a])*t, z[a]+(z[b]-z[a])*t]);
+        }
+      }
+      if(hit.length===2)segs.push(hit);
+    }
+    geo.dispose();
+  }
+  return segs;
+}
+
+/* 把散亂的線段接成封閉迴圈。端點用 1e-4 mm 的格子量化當鑰匙——同一個頂點
+   從相鄰兩個三角形算出來會差在浮點誤差的等級，不量化就接不起來。
+   真的接不起來（模型有破洞）就把那條開放的鏈原樣輸出，不要默默丟掉。 */
+function chainLoops(segs){
+  const K=v=>Math.round(v*1e4);
+  const key=p=>K(p[0])+','+K(p[1]);
+  const at=new Map();                       // 端點 -> 還沒用掉的線段編號
+  segs.forEach((s,i)=>{
+    for(const p of s){
+      const k=key(p);
+      if(!at.has(k))at.set(k,[]);
+      at.get(k).push(i);
+    }
+  });
+  const used=new Array(segs.length).fill(false);
+  const next=(k,skip)=>{
+    for(const i of (at.get(k)||[]))if(!used[i]&&i!==skip)return i;
+    return -1;
+  };
+  const loops=[];
+  for(let s=0;s<segs.length;s++){
+    if(used[s])continue;
+    used[s]=true;
+    const pts=[segs[s][0],segs[s][1]];
+    let tail=key(pts[1]);
+    for(;;){
+      const i=next(tail);
+      if(i<0)break;
+      used[i]=true;
+      const [a,b]=segs[i];
+      const p=key(a)===tail?b:a;
+      pts.push(p);
+      tail=key(p);
+      if(tail===key(pts[0]))break;          // 接回起點，收工
+    }
+    if(pts.length>=3)loops.push(pts);
+  }
+  return loops;
+}
+
+/* 三角化留下一堆共線的點（一個 40mm 的直邊會被切成七十幾段）。
+   把偏離前後兩點連線不到 SIMPLIFY_TOL 的中間點拿掉，檔案小很多，
+   雷切軟體裡也好編輯。門檻訂在千分之一毫米，遠比雷射的刀寬細，不會改變形狀。 */
+const SIMPLIFY_TOL=1e-3;
+/* 先併掉「幾乎同一個位置」的點，再刪共線的點。順序不能反過來：
+   切面在轉角會留下一堆相距萬分之一毫米的碎點，轉角本身相對這種近鄰
+   的偏離也只有萬分之幾，看起來就跟共線一樣——不先併掉的話連轉角都會
+   被判成可以刪，整圈點全部消失（實際踩過，方塊的外框 73 個點一個不留）。*/
+function dedupRing(pts,eps){
+  const out=[];
+  for(const p of pts){
+    const q=out[out.length-1];
+    if(!q||Math.hypot(p[0]-q[0],p[1]-q[1])>=eps)out.push(p);
+  }
+  while(out.length>2&&
+        Math.hypot(out[0][0]-out[out.length-1][0],out[0][1]-out[out.length-1][1])<eps)out.pop();
+  return out;
+}
+function simplifyRing(pts){
+  const r=dedupRing(pts,SIMPLIFY_TOL);
+  if(r.length<4)return r.length>=3?r:pts;
+  const keep=[],n=r.length;
+  for(let i=0;i<n;i++){
+    // 比的是左右鄰居，不是「上一個留下來的點」：用留下來的點當基準會在
+    // 轉角出事——基準跑到整條邊的另一端時，轉角相對那條長弦的偏離反而
+    // 很小，連轉角都會被當成共線刪掉。
+    const a=r[(i-1+n)%n], b=r[i], c=r[(i+1)%n];
+    const ux=c[0]-a[0], uy=c[1]-a[1];
+    const L=Math.hypot(ux,uy);
+    // 垂直距離＝三角形面積的兩倍除以底邊長
+    const dev=L<1e-12?Math.hypot(b[0]-a[0],b[1]-a[1])
+                     :Math.abs((b[0]-a[0])*uy-(b[1]-a[1])*ux)/L;
+    if(dev>=SIMPLIFY_TOL)keep.push(b);
+  }
+  return keep.length>=3?keep:r;
+}
+
+function* svgG(my){
+  const parts=yield* exportGeosG(my,'匯出 SVG');
+  if(!parts.length)return {why:'empty'};
+  my.stage='匯出 SVG：切剖面';
+  const segs=yield* sliceSegsG(my,parts);
+  if(!segs.length)return {why:'nocross'};
+  my.stage='匯出 SVG：接線';
+  const loops=chainLoops(segs);
+  if(!loops.length)return {why:'nocross'};
+
+  my.stage='匯出 SVG：寫檔';
+  let x0=1/0,y0=1/0,x1=-1/0,y1=-1/0;
+  for(const L of loops)for(const p of L){
+    if(p[0]<x0)x0=p[0]; if(p[0]>x1)x1=p[0];
+    if(p[1]<y0)y0=p[1]; if(p[1]>y1)y1=p[1];
+  }
+  const M=1;                                        // 四周留 1mm
+  x0-=M;y0-=M;x1+=M;y1+=M;
+  const w=+(x1-x0).toFixed(3), h=+(y1-y0).toFixed(3);
+  const f=v=>(+v.toFixed(4)).toString();
+  const out=[
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" `+
+    `viewBox="${f(x0)} ${f(y0)} ${w} ${h}">`,
+    '<!-- 加減法建模器：工作平面剖面。紅線＝切穿 -->',
+    '<g fill="none" stroke="#ff0000" stroke-width="0.1">'];
+  let k=0;
+  for(const L of loops){
+    if(k++%2000===0)yield;
+    // 起點和終點是同一個點，畫路徑時不用重複寫，交給 Z 收尾
+    const closed=Math.abs(L[0][0]-L[L.length-1][0])<1e-4&&
+                 Math.abs(L[0][1]-L[L.length-1][1])<1e-4;
+    const pts=closed?simplifyRing(L.slice(0,-1)):L;
+    out.push('<path d="M'+pts.map(p=>f(p[0])+' '+f(p[1])).join(' L')+(closed?' Z':'')+'"/>');
+  }
+  out.push('</g>','</svg>');
+  yield;
+  return {blob:new Blob([out.join('\n')+'\n'],{type:'image/svg+xml'}), loops:loops.length};
+}
+
+document.getElementById('btnSvg').onclick=()=>{
+  startJob(my=>svgG(my),`匯出 SVG（${exportScopeLabel()}）`,r=>{
+    if(!r||r.why==='empty'){
+      alert('沒有可以匯出的實體。\n（最上層的孔洞不會被匯出，要先跟實體組合起來。）');
+      return;
+    }
+    if(r.why==='nocross'){
+      alert('沒有東西跟工作平面相交，所以切不出圖形。\n\n'+
+            'SVG 匯出的是「模型被工作平面切過的那一層」，跟 Tinkercad 一樣。\n'+
+            '請把模型往下移，讓要切的那一層穿過地面的格子，再匯出一次。\n'+
+            '（想拿到不同高度的輪廓，就把模型移到不同高度各匯出一次。）');
+      return;
+    }
+    download('model.svg',r.blob);
   });
 };
 
