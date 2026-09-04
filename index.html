@@ -125,9 +125,6 @@
   .kids{margin-left:13px;border-left:1px solid var(--line);padding-left:6px;}
   .row{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
   .row label{width:16px;color:var(--dim);}
-  /* 文字標籤的那一列（陣列複製）：X/Y/Z 那種一個字的欄寬會把它擠成直的 */
-  .row.wide label{width:auto;flex:0 0 52px;white-space:nowrap;}
-  .row.wide input{flex:1;min-width:0;}
   input[type=number]{
     width:100%;font:inherit;color:var(--text);background:var(--ink);
     border:1px solid var(--line);border-radius:4px;padding:4px 6px;
@@ -1627,11 +1624,9 @@ function ghostShow(fn){
   ghostClear();
   for(const m of selectedMeshes()){
     const M=fn(m);if(!M)continue;
-    for(const one of (Array.isArray(M)?M:[M])){      // 陣列複製會一次要好幾個
-      const g=new THREE.Mesh(m.geometry,GHOST_MAT);  // 幾何體共用，不複製
-      g.matrixAutoUpdate=false;g.matrix.copy(one);
-      ghostLayer.add(g);
-    }
+    const g=new THREE.Mesh(m.geometry,GHOST_MAT);   // 幾何體共用，不複製
+    g.matrixAutoUpdate=false;g.matrix.copy(M);
+    ghostLayer.add(g);
   }
 }
 function ghostAlign(axis,where){
@@ -1653,75 +1648,6 @@ function ghostMirror(axis){
     .multiply(new THREE.Matrix4().makeTranslation(-c.x,-c.y,-c.z));
   ghostShow(()=>M);
   addMirrorArrow(axis,c);
-}
-/* ---- 陣列複製 ----
-   跟鏡像一樣是「把已經做好的東西再生一份」，只是變換換成一連串位移。
-   間距量的是**中心到中心**，預設填選取範圍在那根軸上的長度——所以預設
-   剛好是一個接一個排排站。填負的就往反方向長。 */
-let arAxis='x', arCount=2, arStep=null;   // arStep=null 代表「照預設」
-function arrayStep(){
-  if(arStep!==null)return arStep;
-  const b=selBox();if(!b)return 20;
-  return Math.round(b.getSize(new THREE.Vector3())[arAxis]*10)/10||20;
-}
-function arrayOffsets(){
-  const k=['x','y','z'].indexOf(arAxis), d=arrayStep(), out=[];
-  for(let i=1;i<=arCount;i++){const t=[0,0,0];t[k]=Math.round(i*d*100)/100;out.push(t);}
-  return out;
-}
-function ghostArray(){
-  const offs=arrayOffsets();
-  ghostShow(()=>offs.map(t=>
-    new THREE.Matrix4().makeTranslation(t[0],t[1],t[2])));
-}
-function arraySel(){
-  if(!selected.length||arCount<1)return;
-  const src=roots.filter(n=>selected.includes(n.id));
-  if(!src.length)return;
-  pushUndo();
-  const made=[];
-  for(const t of arrayOffsets()){
-    for(const n of src){
-      const c=JSON.parse(JSON.stringify(n));
-      renumber(c);
-      c.pos=c.pos.map((v,i)=>Math.round((v+t[i])*100)/100);
-      made.push(c);
-    }
-  }
-  roots=roots.concat(made);
-  selected=made.map(n=>n.id);
-  ghostClear();rebuild();
-}
-function arrayHtml(){
-  const seg=(ax,t)=>`<button data-arax="${ax}" class="${arAxis===ax?'on':''}">${t}</button>`;
-  return `<div class="grp"><h2>陣列複製</h2></div>
-    <div class="seg">${seg('x','左右')}${seg('y','上下')}${seg('z','前後')}</div>
-    <div class="row wide"><label>再幾份</label>
-      <input type="number" id="arN" step="1" min="1" max="200" value="${arCount}"></div>
-    <div class="row wide"><label>間距 mm</label>
-      <input type="number" id="arD" step="1" value="${arrayStep()}"></div>
-    <button id="arGo" style="width:100%">複製出來</button>`;
-}
-function hookArray(host){
-  const nEl=host.querySelector('#arN'), dEl=host.querySelector('#arD');
-  if(!nEl)return;
-  host.querySelectorAll('[data-arax]').forEach(b=>b.onclick=()=>{
-    arAxis=b.dataset.arax;arStep=null;                 // 換軸就回到那根軸的預設間距
-    host.querySelectorAll('[data-arax]').forEach(x=>
-      x.classList.toggle('on',x.dataset.arax===arAxis));
-    dEl.value=arrayStep();ghostArray();
-  });
-  nEl.oninput=()=>{
-    arCount=Math.max(1,Math.min(200,Math.round(parseFloat(nEl.value)||1)));
-    ghostArray();
-  };
-  dEl.oninput=()=>{arStep=parseFloat(dEl.value)||0;ghostArray();};
-  const go=host.querySelector('#arGo');
-  go.onclick=arraySel;
-  go.onpointerenter=ghostArray;
-  // 滑出整個陣列那一區才收掉鬼影，在裡面調數字的時候要一直看得到
-  const grp=[nEl,dEl,go,...host.querySelectorAll('[data-arax]')];
-  grp.forEach(el=>el.onpointerenter=el.onpointerenter||ghostArray);
 }
 // 雙頭箭頭：告訴你會沿哪個方向翻。長度照選取範圍走，太小的時候有下限。
 function addMirrorArrow(axis,c){
@@ -1764,7 +1690,6 @@ function drawInspector(){
         <div class="seg">${btn('y',-1,'下')}${btn('y',0,'中')}${btn('y',1,'上')}</div>
         <div class="grp"><h2>鏡像（繞整包的中心翻）</h2></div>
         <div class="seg">${mbtn('x','左右')}${mbtn('y','上下')}${mbtn('z','前後')}</div>
-        ${arrayHtml()}
         <div class="grp"></div>
         <button id="doGroup" style="width:100%">組合成一個</button>`;
       host.querySelectorAll('[data-ax]').forEach(b=>{
@@ -1772,7 +1697,7 @@ function drawInspector(){
         b.onpointerenter=()=>ghostAlign(b.dataset.ax,+b.dataset.w);
         b.onpointerleave=ghostClear;
       });
-      hookMirror(host);hookArray(host);
+      hookMirror(host);
       document.getElementById('doGroup').onclick=()=>
         document.getElementById('btnGroup').click();
     } else {
@@ -1816,10 +1741,9 @@ function drawInspector(){
       <button data-mir="y">上下</button>
       <button data-mir="z">前後</button>
     </div>
-    ${arrayHtml()}
     <div class="grp"><h2>放到地面</h2></div>
     <button id="drop" style="width:100%">貼齊工作平面</button>`;
-  hookMirror(host);hookArray(host);
+  hookMirror(host);
   host.querySelectorAll('input[type=number]').forEach(inp=>{
     inp.onchange=()=>{pushUndo();
       let v=parseFloat(inp.value)||0;
