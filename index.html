@@ -440,14 +440,82 @@ class Poly {
    把 generator 一口氣跑完（drain），匯出 STL／OBJ 那條路還是用它們。 */
 const YIELD_EVERY=6000;
 function drain(it){let r=it.next();while(!r.done)r=it.next();return r.value;}
+/* ---- 包圍盒工具：讓布林運算跳過「離得很遠、根本切不到」的東西 ----
+   BSP 判斷內外靠的是完整封閉的殼，所以殼一定在自己的包圍盒裡面。
+   反過來說：完全落在殼的包圍盒外面的多邊形，一定在實體外面——
+   clipPolygons 本來就會把它原封不動留下來，不必真的送進樹裡一路切。
+   在大模型上挖一個小洞時，絕大多數的面都屬於這一類，一個盒子測試就
+   打發掉，省下整趟走訪。留下來的東西完全一樣（連物件本身都是同一個），
+   只是少繞路。盒子一律留 EPS 的餘裕，寧可多算也不要少算。 */
+function polyBox(p){
+  const vs=p.vertices;let q=vs[0].pos;
+  let x0=q.x,x1=q.x,y0=q.y,y1=q.y,z0=q.z,z1=q.z;
+  for(let i=1;i<vs.length;i++){
+    q=vs[i].pos;
+    if(q.x<x0)x0=q.x;else if(q.x>x1)x1=q.x;
+    if(q.y<y0)y0=q.y;else if(q.y>y1)y1=q.y;
+    if(q.z<z0)z0=q.z;else if(q.z>z1)z1=q.z;
+  }
+  return [x0,y0,z0,x1,y1,z1];
+}
+function boxHit(a,b){
+  return !(a[3]<b[0]-EPS||a[0]>b[3]+EPS||
+           a[4]<b[1]-EPS||a[1]>b[4]+EPS||
+           a[5]<b[2]-EPS||a[2]>b[5]+EPS);
+}
+function polyFar(p,B){
+  const vs=p.vertices;let q=vs[0].pos;
+  let x0=q.x,x1=q.x,y0=q.y,y1=q.y,z0=q.z,z1=q.z;
+  for(let i=1;i<vs.length;i++){
+    q=vs[i].pos;
+    if(q.x<x0)x0=q.x;else if(q.x>x1)x1=q.x;
+    if(q.y<y0)y0=q.y;else if(q.y>y1)y1=q.y;
+    if(q.z<z0)z0=q.z;else if(q.z>z1)z1=q.z;
+  }
+  return x1<B[0]-EPS||x0>B[3]+EPS||
+         y1<B[1]-EPS||y0>B[4]+EPS||
+         z1<B[2]-EPS||z0>B[5]+EPS;
+}
 class Bsp {
-  constructor(polys){this.plane=null;this.front=null;this.back=null;this.polygons=[];if(polys)this.build(polys);}
+  constructor(polys){this.plane=null;this.front=null;this.back=null;this.polygons=[];
+    this.box=null;this.boxOk=false;this.inverted=false;if(polys)this.build(polys);}
+  /* 每個節點記住「我這一支底下的東西佔哪個範圍」。後序走訪算一遍就好，
+     只有 buildG 加進新的多邊形時才需要重算（clipTo 只會讓多邊形變少，
+     舊盒子仍然罩得住，當成保守估計繼續用是安全的）。 */
+  ensureBoxes(){
+    if(this.boxOk)return;
+    const order=[],st=[this];
+    while(st.length){
+      const n=st.pop();order.push(n);
+      if(n.front)st.push(n.front);
+      if(n.back)st.push(n.back);
+    }
+    for(let i=order.length-1;i>=0;i--){
+      const n=order[i];
+      let x0=Infinity,y0=Infinity,z0=Infinity,x1=-Infinity,y1=-Infinity,z1=-Infinity;
+      for(const p of n.polygons)for(const v of p.vertices){
+        const q=v.pos;
+        if(q.x<x0)x0=q.x;if(q.x>x1)x1=q.x;
+        if(q.y<y0)y0=q.y;if(q.y>y1)y1=q.y;
+        if(q.z<z0)z0=q.z;if(q.z>z1)z1=q.z;
+      }
+      for(const c of [n.front,n.back])if(c&&c.box){
+        const b=c.box;
+        if(b[0]<x0)x0=b[0];if(b[3]>x1)x1=b[3];
+        if(b[1]<y0)y0=b[1];if(b[4]>y1)y1=b[4];
+        if(b[2]<z0)z0=b[2];if(b[5]>z1)z1=b[5];
+      }
+      n.box=(x0<=x1)?[x0,y0,z0,x1,y1,z1]:null;
+      n.boxOk=true;
+    }
+  }
   clone(){
     const root=new Bsp();
     const stack=[[this,root]];
     while(stack.length){
       const [s,d]=stack.pop();
       d.plane=s.plane&&s.plane.clone();
+      d.inverted=s.inverted;
       d.polygons=s.polygons.map(p=>p.clone());
       if(s.front){d.front=new Bsp();stack.push([s.front,d.front]);}
       if(s.back){d.back=new Bsp();stack.push([s.back,d.back]);}
@@ -455,6 +523,9 @@ class Bsp {
     return root;
   }
   invert(){
+    /* 反轉之後這棵樹代表的是「補集」——原本實體外面的全部變成實體。
+       盒子剪枝的前提（實體一定在盒子裡）因此顛倒，所以要記著現在是哪一邊。 */
+    this.inverted=!this.inverted;
     const stack=[this];
     while(stack.length){
       const n=stack.pop();
@@ -467,7 +538,22 @@ class Bsp {
   }
   *clipPolygonsG(polys){
     const out=[];
-    const stack=[[this,polys]];
+    /* 先篩掉離這棵樹很遠的：它們一定落在原本那個實體的外面，答案不必
+       走一趟樹也知道——沒反轉時整個留下，反轉（補集）時整個丟掉。
+       大模型挖小洞時這一關就打發掉九成以上的面。 */
+    this.ensureBoxes();
+    let todo=polys;
+    if(this.box&&polys.length){
+      const near=[],keepFar=!this.inverted;
+      let quota=YIELD_EVERY;
+      for(const p of polys){
+        if(--quota<=0){quota=YIELD_EVERY;yield;}
+        if(polyFar(p,this.box)){if(keepFar)out.push(p);}
+        else near.push(p);
+      }
+      todo=near;
+    }
+    const stack=[[this,todo]];
     let budget=YIELD_EVERY;
     while(stack.length){
       const [n,ps]=stack.pop();
@@ -483,9 +569,16 @@ class Bsp {
     return out;
   }
   *clipToG(bsp){
+    /* 自己這邊也用盒子剪枝：整支子樹都離對方很遠的話，裡面每一個多邊形
+       都在對方外面，clip 之後原封不動，連走都不必走進去。
+       對方反轉過（代表補集）時這條不成立，那時候交給 clipPolygonsG
+       裡面那一關逐個處理。 */
+    bsp.ensureBoxes();this.ensureBoxes();
+    const B=bsp.inverted?null:bsp.box;
     const stack=[this];
     while(stack.length){
       const n=stack.pop();
+      if(B&&n.box&&!boxHit(n.box,B))continue;
       n.polygons=yield* bsp.clipPolygonsG(n.polygons);
       if(n.front)stack.push(n.front);
       if(n.back)stack.push(n.back);
@@ -493,6 +586,7 @@ class Bsp {
   }
   *buildG(polys){
     if(!polys.length)return;
+    this.boxOk=false;                      // 加了新的多邊形，盒子要重算
     const stack=[[this,polys]];
     let budget=YIELD_EVERY;
     while(stack.length){
@@ -521,10 +615,14 @@ class Bsp {
     return out;
   }
 }
+/* pa／pb 會被直接拿去用（建樹、invert 都會就地改動），呼叫端交出來之後
+   就不要再碰那兩個陣列了。以前這裡先整份 clone 一遍，但兩個呼叫端
+   （evalNodeG 的組合那段）給的都是當場算出來、用完即丟的多邊形，
+   那一份複製是白做的——幾十萬個物件的配置與回收，省下來很有感。 */
 function* csgG(pa,pb,op){
   const a=new Bsp(), b=new Bsp();
-  yield* a.buildG(pa.map(p=>p.clone()));
-  yield* b.buildG(pb.map(p=>p.clone()));
+  yield* a.buildG(pa);
+  yield* b.buildG(pb);
   if(op==='union'){
     yield* a.clipToG(b); yield* b.clipToG(a); b.invert(); yield* b.clipToG(a); b.invert();
     yield* a.buildG(b.allPolygons()); return a.allPolygons();
