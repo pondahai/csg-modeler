@@ -246,7 +246,6 @@
       <button id="btnPlace">插入元件（存檔）</button>
       <button id="btnImportStl">匯入 STL</button>
       <button id="btnImportSvg">匯入 SVG（平面圖形）</button>
-      <button id="btnText">加入文字</button>
       <div class="head">送出去列印／給別的軟體</div>
       <button id="btnStl">匯出 STL</button>
       <button id="btnObj">匯出 OBJ</button>
@@ -2824,7 +2823,7 @@ function askText(){
     addEventListener('keydown',key);
   });
 }
-document.getElementById('btnText').onclick=async()=>{
+async function addText(){
   const opt=await askText();
   if(!opt)return;
   const bg=document.getElementById('txtDlgBg');
@@ -2865,7 +2864,27 @@ document.getElementById('btnText').onclick=async()=>{
     roots.push(n);selected=[n.id];rebuild();
   }catch(err){alert('這幾個字做不出來：'+err.message);}
   finally{bg.classList.remove('on','wait');}
-};
+}
+
+/* 元件選單那一格的縮圖：拿自己的管線做一個立體的「A」。
+   用「粗」就好，縮圖只有幾十像素，看不出差別，但省下開檔時的等待。 */
+function textTileGeo(){
+  const c=textContours({text:'A',font:'Arial',size:1,bold:true,qual:'coarse'});
+  if(!c||!c.length)return null;
+  const v=extrudeShapes(contoursToShapes(c),0.35);
+  if(!v.length)return null;
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(Float32Array.from(v),3));
+  g.rotateX(Math.PI/2);           // 擠出來是躺平的，縮圖裡立起來才看得懂
+  g.computeBoundingBox();
+  const b=g.boundingBox, sz=b.getSize(new THREE.Vector3());
+  const ctr=b.getCenter(new THREE.Vector3());
+  g.translate(-ctr.x,-ctr.y,-ctr.z);
+  g.scale(1/Math.max(sz.x,sz.y,sz.z),1/Math.max(sz.x,sz.y,sz.z),
+          1/Math.max(sz.x,sz.y,sz.z));
+  g.computeVertexNormals();
+  return g;
+}
 
 /* ---- 匯出 ----
    **不會自動幫你做組合。** 沒有組合起來的東西就是各自獨立的：
@@ -3175,6 +3194,9 @@ const PALETTE=[
   {shape:'wedge',    label:'楔形'},
   {shape:'prism',    label:'多邊形柱'},
   {shape:'tube',     label:'圓管'},
+  // 文字不是參數化形狀，點下去是開一個小視窗問要刻什麼字。放在這裡是因為
+  // 使用者要的是「跟其他元件一樣的一顆按鈕」，不是藏在檔案選單裡。
+  {text:true,        label:'文字'},
 ];
 const IDLE_SPIN=.6;          // 沒被指到時停在這個角度，看得出立體感
 let palR=null, palScene=null, palCam=null, palTiles=[], palW=0, palH=0;
@@ -3183,11 +3205,12 @@ function buildPalette(){
   const host=document.getElementById('palette');
   host.innerHTML='<canvas id="palCv"></canvas>'+
     PALETTE.map((p,i)=>`<button class="pal" data-i="${i}" `+
-      `title="加入${p.label}"><span>${p.label}</span></button>`).join('');
+      `title="${p.text?'加入文字（會問你要刻什麼）':'加入'+p.label}">`+
+      `<span>${p.label}</span></button>`).join('');
 
   host.querySelectorAll('button.pal').forEach(b=>{
     const it=PALETTE[+b.dataset.i];
-    b.onclick=()=>add(it.shape,it.r);
+    b.onclick=it.text?addText:(()=>add(it.shape,it.r));
   });
 
   try{
@@ -3203,17 +3226,25 @@ function buildPalette(){
     palCam.position.set(2.5,1.9,3.1);palCam.lookAt(0,.22,0);
 
     palTiles=PALETTE.map((p,i)=>{
-      const n=makeShape(p.shape,p.r);    // 只是拿來產生單位幾何，不進場景
-      if(p.r)n.r=3.5;                    // 縮圖裡把圓角放大一點，才看得出差別
-      const geo=baseGeo(n);
-      // 依這個形狀的預設尺寸縮一下，縮圖長什麼樣，點下去就得到什麼樣
-      const mx=Math.max(...n.size);
-      geo.scale(n.size[0]/mx,n.size[1]/mx,n.size[2]/mx);
+      let geo,col;
+      if(p.text){
+        geo=textTileGeo();
+        if(!geo)return null;             // 描不出來就不畫這一格的縮圖
+        col=SHAPE_COLOR.mesh;
+      }else{
+        const n=makeShape(p.shape,p.r);  // 只是拿來產生單位幾何，不進場景
+        if(p.r)n.r=3.5;                  // 縮圖裡把圓角放大一點，才看得出差別
+        geo=baseGeo(n);
+        // 依這個形狀的預設尺寸縮一下，縮圖長什麼樣，點下去就得到什麼樣
+        const mx=Math.max(...n.size);
+        geo.scale(n.size[0]/mx,n.size[1]/mx,n.size[2]/mx);
+        col=p.color||SHAPE_COLOR[p.shape];
+      }
       const mesh=new THREE.Mesh(geo,new THREE.MeshLambertMaterial(
-        {color:new THREE.Color(p.color||SHAPE_COLOR[p.shape])}));
+        {color:new THREE.Color(col)}));
       return {mesh, spin:IDLE_SPIN, hot:false,
               btn:host.querySelector(`button.pal[data-i="${i}"]`)};
-    });
+    }).filter(Boolean);
     palTiles.forEach(t=>{
       t.btn.onpointerenter=()=>t.hot=true;
       t.btn.onpointerleave=()=>t.hot=false;
