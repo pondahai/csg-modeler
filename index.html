@@ -476,9 +476,99 @@ function polyFar(p,B){
          y1<B[1]-EPS||y0>B[4]+EPS||
          z1<B[2]-EPS||z0>B[5]+EPS;
 }
+/* ---- 挑切割面 ----
+   原本是拿手上第一個多邊形的平面（csg.js 的原始寫法）。方塊圓柱只有十幾面時
+   無所謂，但匯入的 STL 是幾萬個朝向雜亂的小三角形，樹會退化成一條鏈，深度
+   從 log n 變成 n——這正是耗時隨面數平方成長的來源。
+
+   **凸的東西用「模型自己的面」永遠切不開。** 球、圓柱、多數匯入的模型都是
+   凸的或接近凸的：每一個面的平面都把其他所有面留在同一側（那就是凸的定義），
+   所以不管挑哪一個面，都是「一邊 0 個、另一邊全部」。光是改成「挑最平衡的
+   面」沒有用，實測反而慢 30%，因為挑不出好的還多花了評分的錢。
+
+   所以再給它一條路：面的平面都切不開時，改用**空間對半切**——沿著最長的那
+   一軸，切在多邊形中心的中位數上。那個平面不是實體的表面（下面叫 aux），
+   純粹用來把空間分兩半，樹就真的分岔了。
+
+   代價是樹上多了一種「不是表面」的平面，於是每個節點要自己記住「我這塊空間
+   是實體裡面還是外面」（`st`，見 Bsp）。原本的規則「前面＝外、後面＝內」只
+   對表面的平面成立。
+
+   評分：切碎最貴（切開一個就多一個面，而且一路傳下去），共面的算加分（它們
+   留在節點上，兩邊都不必再處理）。候選和評分都只取樣，等距、不用亂數，所以
+   同一份輸入每次結果完全一樣。 */
+const SPLIT_CANDIDATES=12, SPLIT_SAMPLE=160, SPLIT_COST=8;
+const SPLIT_MIN_RATIO=0.15;      // 少的那邊佔不到這個比例，就當作「切不開」
+const AUX_MIN=600;               /* 只有多邊形多到這個數量才准動用空間對半切。
+   這道門檻是整段的關鍵：空間對半切會把跨過那一刀的三角形全部切開，一路遞迴
+   下去就雪崩——實測不設限時 1104 面會變成 118550 面、慢 450 倍。而凸的東西
+   用表面的平面建樹雖然是一條鏈（慢），卻一個三角形都不會被切碎。所以只在
+   「堆很大」的時候切幾刀把它分開，小堆交回原本的作法：切的刀數是
+   log(n/AUX_MIN)，碎片有限，而每個小堆的成本固定，總成本就從平方變成接近
+   線性。 */
+function choosePlane(ps){
+  const n=ps.length;
+  if(n<=2)return {plane:ps[0].plane,aux:false};
+  const cN=Math.min(SPLIT_CANDIDATES,n), sN=Math.min(SPLIT_SAMPLE,n);
+  let best=ps[0].plane, bestScore=Infinity, bestMin=0;
+  for(let c=0;c<cN;c++){
+    const pl=ps[Math.floor((c+0.5)*n/cN)].plane;
+    const r=rate(ps,sN,pl);
+    if(r.score<bestScore){bestScore=r.score;best=pl;bestMin=r.min;}
+  }
+  if(bestMin>=sN*SPLIT_MIN_RATIO||n<AUX_MIN)return {plane:best,aux:false};
+  return {plane:auxPlane(ps,sN),aux:true};
+}
+/* 拿一批取樣的多邊形去試一個平面：切碎最貴，兩邊差得多也扣分，
+   共面的算加分（它們留在節點上，兩邊都不必再處理）。 */
+function rate(ps,sN,pl){
+  const n=ps.length;
+  const nx=pl.normal.x,ny=pl.normal.y,nz=pl.normal.z,w=pl.w;
+  let front=0,back=0,split=0,co=0;
+  for(let s=0;s<sN;s++){
+    const vs=ps[Math.floor((s+0.5)*n/sN)].vertices;
+    let f=0,b=0;
+    for(let i=0;i<vs.length;i++){
+      const q=vs[i].pos, t=nx*q.x+ny*q.y+nz*q.z-w;
+      if(t<-EPS)b=1;else if(t>EPS)f=1;
+    }
+    if(f&&b)split++;else if(f)front++;else if(b)back++;else co++;
+  }
+  return {score:split*SPLIT_COST+Math.abs(front-back)-co,
+          min:Math.min(front+split,back+split)};
+}
+/* 空間對半切：三個軸 × 三個位置（四分之一／中間／四分之三）試過去，
+   挑切碎最少又夠平衡的那一刀。位置多試幾個是為了切在「空隙」上。 */
+function auxPlane(ps,sN){
+  const n=ps.length, c=[[],[],[]];
+  for(let s=0;s<sN;s++){
+    const vs=ps[Math.floor((s+0.5)*n/sN)].vertices;
+    let x=0,y=0,z=0;
+    for(let i=0;i<vs.length;i++){const q=vs[i].pos;x+=q.x;y+=q.y;z+=q.z;}
+    c[0].push(x/vs.length);c[1].push(y/vs.length);c[2].push(z/vs.length);
+  }
+  const AX=[new V(1,0,0),new V(0,1,0),new V(0,0,1)];
+  let best=null,bestScore=Infinity;
+  for(let a=0;a<3;a++){
+    const sorted=c[a].slice().sort((x,y)=>x-y);
+    for(const q of [0.25,0.5,0.75]){
+      const pl=new Plane(AX[a],sorted[Math.min(sorted.length-1,Math.floor(sorted.length*q))]);
+      const r=rate(ps,sN,pl);
+      if(r.min>0&&r.score<bestScore){bestScore=r.score;best=pl;}
+    }
+  }
+  return best||new Plane(AX[0],c[0][0]);
+}
 class Bsp {
   constructor(polys){this.plane=null;this.front=null;this.back=null;this.polygons=[];
-    this.box=null;this.boxOk=false;this.inverted=false;if(polys)this.build(polys);}
+    this.box=null;this.boxOk=false;
+    /* st：這個節點所代表的那塊空間是實體的裡面（1）還是外面（0）。
+       aux 為真時這個平面不是實體的表面，只是拿來分空間的，所以兩邊都繼承
+       同一個 st；一般（表面的）平面才適用「前面＝外、後面＝內」。
+       根節點的 st 同時就是「整棵樹有沒有被 invert 過」——反轉代表補集，
+       外面變成裡面，包圍盒剪枝的方向要跟著顛倒。 */
+    this.st=0;this.aux=false;
+    if(polys)this.build(polys);}
   /* 每個節點記住「我這一支底下的東西佔哪個範圍」。後序走訪算一遍就好，
      只有 buildG 加進新的多邊形時才需要重算（clipTo 只會讓多邊形變少，
      舊盒子仍然罩得住，當成保守估計繼續用是安全的）。 */
@@ -515,7 +605,7 @@ class Bsp {
     while(stack.length){
       const [s,d]=stack.pop();
       d.plane=s.plane&&s.plane.clone();
-      d.inverted=s.inverted;
+      d.st=s.st;d.aux=s.aux;
       d.polygons=s.polygons.map(p=>p.clone());
       if(s.front){d.front=new Bsp();stack.push([s.front,d.front]);}
       if(s.back){d.back=new Bsp();stack.push([s.back,d.back]);}
@@ -524,11 +614,11 @@ class Bsp {
   }
   invert(){
     /* 反轉之後這棵樹代表的是「補集」——原本實體外面的全部變成實體。
-       盒子剪枝的前提（實體一定在盒子裡）因此顛倒，所以要記著現在是哪一邊。 */
-    this.inverted=!this.inverted;
+       盒子剪枝的前提（實體一定在盒子裡）因此顛倒，靠 st 記著現在是哪一邊。 */
     const stack=[this];
     while(stack.length){
       const n=stack.pop();
+      n.st^=1;                       // 裡外對調
       for(const p of n.polygons)p.flip();
       if(n.plane)n.plane.flip();
       const t=n.front;n.front=n.back;n.back=t;
@@ -544,7 +634,7 @@ class Bsp {
     this.ensureBoxes();
     let todo=polys;
     if(this.box&&polys.length){
-      const near=[],keepFar=!this.inverted;
+      const near=[],keepFar=this.st===0;
       let quota=YIELD_EVERY;
       for(const p of polys){
         if(--quota<=0){quota=YIELD_EVERY;yield;}
@@ -558,13 +648,17 @@ class Bsp {
     while(stack.length){
       const [n,ps]=stack.pop();
       if((budget-=ps.length)<=0){budget=YIELD_EVERY;yield;}
-      if(!n.plane){for(const p of ps)out.push(p);continue;}
+      if(!n.plane){if(n.st===0)for(const p of ps)out.push(p);continue;}
       const front=[],back=[];
       for(const p of ps)n.plane.splitPolygon(p,front,back,front,back);
+      /* 沒有子樹的那一邊就是一塊均勻的空間，落在外面的留下、裡面的丟掉。
+         表面的平面是「前面＝外、後面＝內」；aux 平面兩邊都跟自己一樣。 */
+      const fSt=n.aux?n.st:0, bSt=n.aux?n.st:1;
       /* 先推後面再推前面，pop 出來就是前面先走，跟遞迴版順序相同 */
       if(n.back)stack.push([n.back,back]);
+      else if(bSt===0)for(const p of back)out.push(p);
       if(n.front)stack.push([n.front,front]);
-      else for(const p of front)out.push(p);
+      else if(fSt===0)for(const p of front)out.push(p);
     }
     return out;
   }
@@ -574,7 +668,7 @@ class Bsp {
        對方反轉過（代表補集）時這條不成立，那時候交給 clipPolygonsG
        裡面那一關逐個處理。 */
     bsp.ensureBoxes();this.ensureBoxes();
-    const B=bsp.inverted?null:bsp.box;
+    const B=bsp.st?null:bsp.box;
     const stack=[this];
     while(stack.length){
       const n=stack.pop();
@@ -593,11 +687,26 @@ class Bsp {
       const [n,ps]=stack.pop();
       if(!ps.length)continue;
       if((budget-=ps.length)<=0){budget=YIELD_EVERY;yield;}
-      if(!n.plane)n.plane=ps[0].plane.clone();
-      const front=[],back=[];
-      for(const p of ps)n.plane.splitPolygon(p,n.polygons,n.polygons,front,back);
-      if(back.length){if(!n.back)n.back=new Bsp();stack.push([n.back,back]);}
-      if(front.length){if(!n.front)n.front=new Bsp();stack.push([n.front,front]);}
+      const fresh=!n.plane;
+      if(fresh){
+        const c=choosePlane(ps);
+        n.plane=c.plane.clone();n.aux=c.aux;
+      }
+      let front=[],back=[];
+      if(n.aux){
+        /* aux 平面不是實體的表面，所以共面的多邊形不能留在節點上，
+           要按朝向丟給某一邊，繼續當它們自己的表面用。 */
+        for(const p of ps)n.plane.splitPolygon(p,front,back,front,back);
+        /* 萬一切不開（全部都在同一邊，或全部被切成兩半），就退回用表面的
+           平面——那個至少會把共面的收進節點，一定有進展，不會無窮迴圈。 */
+        if(fresh&&(!front.length||!back.length||front.length+back.length>ps.length*2.2)){
+          n.plane=ps[0].plane.clone();n.aux=false;front=[];back=[];
+        }
+      }
+      if(!n.aux)for(const p of ps)n.plane.splitPolygon(p,n.polygons,n.polygons,front,back);
+      const fSt=n.aux?n.st:0, bSt=n.aux?n.st:1;
+      if(back.length){if(!n.back){n.back=new Bsp();n.back.st=bSt;}stack.push([n.back,back]);}
+      if(front.length){if(!n.front){n.front=new Bsp();n.front.st=fSt;}stack.push([n.front,front]);}
     }
   }
   clipPolygons(polys){return drain(this.clipPolygonsG(polys));}
