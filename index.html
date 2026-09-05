@@ -39,6 +39,11 @@
     display:flex;align-items:center;gap:6px;padding:8px 10px;flex-wrap:wrap;
   }
   #bar .sep{width:1px;height:22px;background:var(--line);margin:0 4px;}
+  #bar label.snap{display:flex;align-items:center;gap:5px;color:var(--dim,#9aa4b2);}
+  #bar select{
+    font:inherit;color:var(--text);background:var(--panel-2);
+    border:1px solid var(--line);border-radius:5px;padding:4px 6px;cursor:pointer;
+  }
   button{
     font:inherit;color:var(--text);background:var(--panel-2);
     border:1px solid var(--line);border-radius:5px;padding:5px 11px;cursor:pointer;
@@ -249,6 +254,18 @@
   <button id="btnRedo">下一步</button>
   <div class="sep"></div>
   <button id="btnFit">看全部</button>
+  <div class="sep"></div>
+  <label class="snap" title="拖曳移動、縮放時每一格跳多少毫米">格線
+    <select id="snapSel">
+      <option value="10">10 mm</option>
+      <option value="5">5 mm</option>
+      <option value="2">2 mm</option>
+      <option value="1" selected>1 mm</option>
+      <option value="0.5">0.5 mm</option>
+      <option value="0.25">0.25 mm</option>
+      <option value="0.1">0.1 mm</option>
+    </select>
+  </label>
   <div class="menu" id="fileMenu">
     <button id="btnFile">檔案</button>
     <div class="pop">
@@ -1048,8 +1065,17 @@ view.appendChild(renderer.domElement);
 scene.add(new THREE.HemisphereLight(0xfffaf0,0xbfb9a8,1.0));
 const dir=new THREE.DirectionalLight(0xffffff,.5);dir.position.set(60,110,80);scene.add(dir);
 
-const grid=new THREE.GridHelper(400,40,0xa9a08a,0xd6cdb6);
-grid.material.transparent=true;grid.material.opacity=.75;scene.add(grid);
+/* 格線的一格 = 目前的吸附格距（SNAP）。格距很小的時候畫滿 400mm 會變成
+   幾千條線，糊成一片又慢，所以線太多就退回 10mm 的格線，只有吸附變細——
+   看得懂比較重要。 */
+let grid=null;
+function makeGrid(cell){
+  const c=(400/cell>200)?10:cell;
+  if(grid){scene.remove(grid);grid.geometry.dispose();grid.material.dispose();}
+  grid=new THREE.GridHelper(400,Math.round(400/c),0xa9a08a,0xd6cdb6);
+  grid.material.transparent=true;grid.material.opacity=.75;scene.add(grid);
+}
+makeGrid(1);
 
 /* 工作平面的「有色玻璃」。匯出 SVG 切的就是這一層，所以要看得出物件
    有沒有穿過去、穿到哪裡。
@@ -1484,7 +1510,14 @@ function dragCopy(n){
   return {pos:n.pos.slice(),rot:n.rot.slice(),size:n.size.slice(),
           post:n.post?n.post.slice():undefined};
 }
-const SNAP=1;
+let SNAP=1;
+/* 拖曳算出來的數字四捨五入到第幾位，要跟著格距走：格距 1mm 以上留一位小數
+   就夠了，0.25／0.1 這種細格留三位，不然剛吸附好的位置馬上又被捨掉。 */
+function q(v){const d=SNAP>=1?10:1000;return Math.round(v*d)/d;}
+const snapSel=document.getElementById('snapSel');
+if(snapSel)snapSel.addEventListener('change',()=>{
+  SNAP=parseFloat(snapSel.value)||1;makeGrid(SNAP);
+});
 function setPtr(e){
   const r=renderer.domElement.getBoundingClientRect();
   ptr.x=((e.clientX-r.left)/r.width)*2-1;
@@ -1762,13 +1795,13 @@ addEventListener('pointermove',e=>{
         if(F[k]===1)continue;
         if(aligned){
           const j=map[k];               // 倍率要套在自身的第 j 格，不是第 k 格
-          n.size[j]=Math.max(.5,Math.round(s0.size[j]*F[k]*10)/10);
+          n.size[j]=Math.max(Math.min(.5,SNAP),q(s0.size[j]*F[k]));
         }else{
           // 轉斜了：把倍率直接記成世界方向的拉伸，拉哪邊就往哪邊變形
           n.post[k]=Math.max(.02,Math.min(50,
             Math.round((s0.post?s0.post[k]:1)*F[k]*1e4)/1e4));
         }
-        n.pos[k]=Math.round((anchor[k]+(s0.pos[k]-anchor[k])*F[k])*10)/10;
+        n.pos[k]=q(anchor[k]+(s0.pos[k]-anchor[k])*F[k]);
       }
     });
     liveScale(F,anchor);return;
