@@ -99,7 +99,10 @@
   button.pal:hover{background:rgba(255,255,255,.05);border-color:var(--focus);}
   button.pal:hover span{color:#fff;}
   button.pal:active{background:rgba(255,255,255,.12);}
-  #view{grid-area:view;position:relative;}
+  /* min-width/height:0 一定要有：格線容器的欄位預設不肯縮到比裡面的東西小，
+     而 3D 畫布在面板收起來時已經被撐寬了。少了這兩行，右邊面板收起來之後
+     就叫不回來——它會被推到視窗外面被裁掉（程式有打開，只是看不見）。 */
+  #view{grid-area:view;position:relative;min-width:0;min-height:0;overflow:hidden;}
   /* 收起側邊面板：整欄寬度收成 0，畫面自己補上去 */
   body.noTree{grid-template-columns:0 1fr 232px;}
   body.noInsp{grid-template-columns:250px 1fr 0;}
