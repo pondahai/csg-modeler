@@ -1976,6 +1976,8 @@ renderer.domElement.addEventListener('wheel',e=>{
    5. 面板
    ============================================================ */
 function nodeLabel(n){
+  // 暫存空間不夠時被拿掉三角形的匯入模型，現在只是一個佔位的空框
+  if(n.lost)return '⚠ '+(n.name||'匯入')+'（要重匯）';
   if(n.name)return n.name;
   if(n.kind==='group')return '組合';
   if(n.kind==='mesh')return '匯入';
@@ -2541,13 +2543,89 @@ document.getElementById('fileIn').onchange=e=>{
   e.target.value='';
 };
 
-/* ---- 自動暫存：關掉再開回到原狀 ---- */
-let saveChars=0, saveFull=false, buildFail=0;
+/* ---- 自動暫存：關掉再開回到原狀 ----
+
+   兩件事讓同樣的模型佔更少的位子：
+
+   一、匯入的三角形（tri）不寫成十進位文字，改成 float32 打包再 base64。
+       一個座標從平均十八個字降到 5.33 個字，省三倍多。tri 已經正規化在
+       1×1×1 裡、畫圖時本來也是 float32，所以精度一點都沒少。
+       手動存出來的 JSON 檔維持原本的數字陣列（那是給人看、給人改的），
+       只有暫存走這條路。
+
+   二、真的塞不下時不要全軍覆沒。以前只要超過額度就整包沒存，連你排了
+       半小時的方塊圓柱都一起不見。現在退一步：把匯入模型的三角形拿掉、
+       換成一個佔位的方塊（記著名字、尺寸、位置、是實體還是孔洞），
+       其他照常存。開回來只要把那個檔案重匯一次就接得回去——佔掉空間的
+       那個東西，剛好是最容易補回來的那個。 */
+let saveChars=0, saveFull=false, saveLost=0, buildFail=0;
+const LS_KEY='csgModeler';
+
+/* tri ⇄ base64。btoa 只吃字串，幾十萬個位元組不能一次 apply 進去
+   （引數太多會爆），所以切成一段一段接起來。 */
+function triEncode(t){
+  const b=new Uint8Array(Float32Array.from(t).buffer);
+  let s='';
+  for(let i=0;i<b.length;i+=8192)s+=String.fromCharCode.apply(null,b.subarray(i,i+8192));
+  return btoa(s);
+}
+function triDecode(s){
+  const bin=atob(s), b=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)b[i]=bin.charCodeAt(i);
+  // 回傳普通陣列：手動存檔和上一步／下一步都是直接 JSON.stringify 整棵樹，
+  // 型別化陣列在那裡會變成 {"0":..} 這種東西。
+  return Array.from(new Float32Array(b.buffer));
+}
+function encodeTree(o){
+  return JSON.stringify(o,(k,v)=>(k==='tri'&&Array.isArray(v))?'b64:'+triEncode(v):v);
+}
+function decodeTri(list){
+  for(const n of list||[]){
+    if(typeof n.tri==='string')n.tri=triDecode(n.tri.slice(4));
+    if(n.children)decodeTri(n.children);
+  }
+  return list;
+}
+
+/* 佔位用的方塊：以原點為中心的 1×1×1，12 個三角形。
+   跟其他匯入的 mesh 走完全同一條路，所以場上、物件樹、把手全部照常運作，
+   只是形狀變成一個框，提醒你這裡少了東西。 */
+function lostTri(){
+  const c=[[-.5,-.5,-.5],[.5,-.5,-.5],[.5,.5,-.5],[-.5,.5,-.5],
+           [-.5,-.5,.5],[.5,-.5,.5],[.5,.5,.5],[-.5,.5,.5]];
+  const f=[[0,3,2],[0,2,1],[4,5,6],[4,6,7],[0,1,5],[0,5,4],
+           [1,2,6],[1,6,5],[2,3,7],[2,7,6],[3,0,4],[3,4,7]];
+  const out=[];
+  for(const t of f)for(const i of t)out.push(...c[i]);
+  return out;
+}
+/* 把匯入的三角形換成佔位方塊，其餘原封不動。回傳新的一棵樹，不動到場上的。 */
+let lostCount=0;
+function stripMesh(list){
+  return (list||[]).map(n=>{
+    const m={...n};
+    if(m.kind==='mesh'&&!m.lost){m.tri=lostTri();m.lost=true;lostCount++;}
+    if(m.children)m.children=stripMesh(m.children);
+    return m;
+  });
+}
+
 function autosave(){
-  const str=JSON.stringify({roots,uid});
+  const str=encodeTree({roots,uid});
   saveChars=str.length;
-  try{localStorage.setItem('csgModeler',str);saveFull=false;}
-  catch(e){saveFull=true;}
+  try{localStorage.setItem(LS_KEY,str);saveFull=false;saveLost=0;return;}
+  catch(e){}
+  // 塞不下：退一步，只放棄匯入的三角形
+  lostCount=0;
+  const lite=stripMesh(roots);
+  try{
+    localStorage.setItem(LS_KEY,encodeTree({roots:lite,uid}));
+    saveFull=true;saveLost=lostCount;
+  }catch(e){
+    // 連這樣都塞不下（幾乎不會發生），至少不要留一份半舊的在那裡騙人
+    try{localStorage.removeItem(LS_KEY);}catch(e2){}
+    saveFull=true;saveLost=-1;
+  }
 }
 /* 圓角方塊曾經是獨立的形狀（shape:'rbox'），後來併回方塊。
    舊的暫存或存檔可能還帶著它，讀進來時就地換掉。 */
@@ -2560,15 +2638,30 @@ function migrate(list){
   }
   return list;
 }
+function countLost(list){
+  let out=[];
+  for(const n of list||[]){
+    if(n.lost)out.push(n.name||'匯入的模型');
+    if(n.children)out=out.concat(countLost(n.children));
+  }
+  return out;
+}
 function autoload(){
   try{
-    const s=localStorage.getItem('csgModeler');
+    const s=localStorage.getItem(LS_KEY);
     if(!s)return false;
     const d=JSON.parse(s);
     if(!Array.isArray(d.roots)||!d.roots.length)return false;
-    dropGeoCache();roots=migrate(d.roots);uid=d.uid;return true;
+    dropGeoCache();roots=migrate(decodeTri(d.roots));uid=d.uid;
+    const lost=countLost(roots);
+    if(lost.length)setTimeout(()=>alert(
+      '上次暫存的空間不夠，這些匯入的模型只留下位置和尺寸：\n\n'+
+      lost.map(s=>'　・'+s).join('\n')+
+      '\n\n畫面上它們現在是空框。重新匯入原本的檔案就可以接回去。'),50);
+    return true;
   }catch(e){return false;}
 }
+
 
 /* ---- 油表：這個模型現在吃掉多少力氣 ----
    面數  = 布林運算的成本來源，超過就會開始頓
@@ -2604,6 +2697,7 @@ function updateGauge(tris,ms){
   const note=document.getElementById('gNote');
   let msg='';
   if(buildFail)msg='有物件算不出來，面數太高了';
+  else if(saveLost>0)msg='暫存不夠，匯入的模型沒存到（其他都在），請手動存檔！';
   else if(saveFull)msg='暫存已滿，請手動存檔！';
   else if(saveChars/GAUGE_MAX.mem>=.8)msg='暫存快滿了，記得存檔';
   else if(ms/GAUGE_MAX.ms>=.5)msg='每次放開滑鼠都要重算這麼久，動之前先想一下';
@@ -2666,8 +2760,10 @@ document.getElementById('filePlace').onchange=e=>{
      SOFT  會頓幾秒     — 問一聲
      HEAVY 會卡好幾分鐘 — 用更重的字再問一次，講明畫面會沒反應
      HARD  擋掉
-   十萬面的模型自動暫存（localStorage 約 5MB）一定存不下，autosave()
-   會亮「暫存已滿，請手動存檔！」，那是預期行為，不是壞掉。
+   十萬面的模型自動暫存（localStorage 約 5MB）還是存不下（base64 之後
+   約 4.8MB，加上別的東西就滿了）。這時 autosave() 會退一步：只放棄匯入的
+   三角形、其他照常存，並亮「暫存不夠，匯入的模型沒存到（其他都在）」。
+   那是預期行為，不是壞掉。
 
    不要用自動減面（decimation）來換取更高的上限：匯入的東西必須跟原檔
    一致，簡化會把螺紋、印章圖案磨掉，而使用者不會發現。 */
