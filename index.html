@@ -202,8 +202,10 @@
   #gauge .sv.never{color:#f0836e;font-weight:600;}
   #gauge .sv.stale{color:#e0a13b;}
   #gauge .note{margin-top:5px;color:#f0836e;font-weight:600;display:none;white-space:normal;line-height:1.35;}
-  /* 常駐的提醒（例如「這台電腦不能暫存」）用淡的，不要一直紅字喊 */
-  #gauge .note.calm{color:var(--dim);font-weight:400;}
+  /* 「暫存放在哪裡」是常駐狀態不是警報，用淡的字。一直紅字喊會被當成背景，
+     真正的警告（算不出來、暫存滿了）反而看不見。只有「完全不能暫存」才轉紅。 */
+  #gauge .mode{margin-top:5px;color:var(--dim);white-space:normal;line-height:1.35;}
+  #gauge .mode.bad{color:#f0836e;font-weight:600;}
   #busy{
     position:absolute;top:12px;left:50%;transform:translateX(-50%);
     background:var(--focus);color:#241d05;padding:4px 6px 4px 12px;border-radius:20px;
@@ -304,7 +306,7 @@
   <input type="file" id="fileSvg" accept=".svg,image/svg+xml" style="display:none">
 </div>
 
-<aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="row"><span class="lbl">存檔</span><span class="sv never" id="gSaveN">從沒存過</span></div><div class="note" id="gNote"></div></div></aside>
+<aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="row"><span class="lbl">存檔</span><span class="sv never" id="gSaveN">從沒存過</span></div><div class="mode" id="gStore"></div><div class="note" id="gNote"></div></div></aside>
 <div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><button id="hintBtn" type="button" title="操作說明">?</button><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<br>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>方向鍵＝推動選取的物件（以目前視角為準）　Ctrl＋上下＝調高度　加按 Shift＝一次走十倍<br>按住 Ctrl 拖物件＝讓它坐到下面那個東西的表面上　拖到一半按 Esc＝取消這次動作</div></div>
 <div id="dim"></div>
 <div id="svgDlgBg" class="dlgBg"><div id="svgDlg" class="dlg">
@@ -2574,18 +2576,83 @@ document.getElementById('fileIn').onchange=e=>{
 let saveChars=0, saveFull=false, saveLost=0, buildFail=0;
 const LS_KEY='csgModeler';
 
-/* 能不能暫存要「實際試寫一次」，不能看網址猜。
-   無痕視窗、封鎖 cookie 的設定、某些瀏覽器的本機檔案政策都會讓 localStorage
-   存在但一寫就丟例外——那些情況從 location.protocol 完全看不出來。
-   試寫一個小東西再刪掉，成功才算數。 */
-const storeOK=(()=>{
+/* ---- 暫存放哪裡：三層，能用哪層就用哪層 ----
+
+   idb  IndexedDB —— 容量是硬碟剩餘空間的一到六成（GB 等級）。
+        只有 https／localhost 有；從隨身碟雙擊（file://）會被當成跨來源擋掉。
+   ls   localStorage —— 約 5MB，file:// 下通常還能用，是這個工具的主力。
+   none 都不行 —— 無痕視窗、封鎖 cookie 的設定。這時候只能靠手動存檔。
+
+   **一定要實際試寫一次，不能看網址猜。** 上面每一種「不能用」的情況，
+   從 location.protocol 都看不出來：無痕視窗的網址跟一般的一模一樣，
+   而 file:// 的 localStorage 其實是可以寫的。寫一個探測值再刪掉，成功才算數。
+
+   Cache Storage 沒有做：解鎖條件跟 IndexedDB 一模一樣（都要安全來源），
+   有 IndexedDB 就不需要它，而且它本來是存網路回應用的，拿來存模型是誤用。
+
+   三層的**行為完全一樣**，只有容量不同。刻意不讓大倉庫多出「可以存很多個
+   模型」這類功能——容量不一樣使用者感覺不到，操作方式不一樣他馬上就撞到，
+   那才是真正的麻煩。 */
+const STORE={mode:'none', quota:5e6, note:''};
+const IDB_DB='csgModeler', IDB_ST='kv', IDB_KEY='scene';
+
+function idbOpen(){
+  return new Promise((res,rej)=>{
+    let req;
+    try{req=indexedDB.open(IDB_DB,1);}catch(e){return rej(e);}
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      if(!db.objectStoreNames.contains(IDB_ST))db.createObjectStore(IDB_ST);
+    };
+    req.onsuccess=()=>res(req.result);
+    req.onerror=()=>rej(req.error||new Error('open failed'));
+    req.onblocked=()=>rej(new Error('blocked'));
+    setTimeout(()=>rej(new Error('timeout')),3000);   // 有些環境會沉默地不回話
+  });
+}
+let idb=null;
+function idbDo(mode,fn){
+  return new Promise((res,rej)=>{
+    if(!idb)return rej(new Error('no db'));
+    let tx;
+    try{tx=idb.transaction(IDB_ST,mode);}catch(e){return rej(e);}
+    const r=fn(tx.objectStore(IDB_ST));
+    tx.oncomplete=()=>res(r?r.result:undefined);
+    tx.onerror=()=>rej(tx.error);
+    tx.onabort=()=>rej(tx.error||new Error('abort'));
+  });
+}
+function lsUsable(){
   try{
     localStorage.setItem(LS_KEY+':probe','1');
     const ok=localStorage.getItem(LS_KEY+':probe')==='1';
     localStorage.removeItem(LS_KEY+':probe');
     return ok;
   }catch(e){return false;}
-})();
+}
+async function probeStore(){
+  // 第一層：IndexedDB。開得起來還不夠，要真的寫進去再讀回來才算數。
+  try{
+    idb=await idbOpen();
+    await idbDo('readwrite',st=>st.put('1',IDB_KEY+':probe'));
+    const v=await idbDo('readonly',st=>st.get(IDB_KEY+':probe'));
+    await idbDo('readwrite',st=>st.delete(IDB_KEY+':probe'));
+    if(v==='1'){
+      STORE.mode='idb';
+      STORE.quota=500e6;
+      try{
+        const e=await navigator.storage.estimate();
+        if(e&&e.quota)STORE.quota=e.quota;
+      }catch(e){}
+      return;
+    }
+  }catch(e){ idb=null; }
+  idb=null;
+  // 第二層：localStorage
+  if(lsUsable()){STORE.mode='ls';STORE.quota=GAUGE_MAX.mem;return;}
+  // 第三層：沒有
+  STORE.mode='none';STORE.quota=0;
+}
 
 /* tri ⇄ base64。btoa 只吃字串，幾十萬個位元組不能一次 apply 進去
    （引數太多會爆），所以切成一段一段接起來。 */
@@ -2636,25 +2703,48 @@ function stripMesh(list){
   });
 }
 
-function autosave(){
+/* 真正把字串放進倉庫。三層只有這一小段不一樣，上面的降級邏輯完全共用。
+   IndexedDB 是非同步的，所以整條路都是 async。 */
+async function storePut(str){
+  if(STORE.mode==='idb'){await idbDo('readwrite',st=>st.put(str,IDB_KEY));return;}
+  localStorage.setItem(LS_KEY,str);
+}
+async function storeGet(){
+  if(STORE.mode==='idb'){
+    const v=await idbDo('readonly',st=>st.get(IDB_KEY));
+    if(v)return v;
+    // 大倉庫是空的，但小格子裡可能有上一次（還沒有大倉庫那時候）的東西
+    try{return localStorage.getItem(LS_KEY);}catch(e){return null;}
+  }
+  return localStorage.getItem(LS_KEY);
+}
+async function storeDrop(){
+  try{
+    if(STORE.mode==='idb')await idbDo('readwrite',st=>st.delete(IDB_KEY));
+    else localStorage.removeItem(LS_KEY);
+  }catch(e){}
+}
+
+async function autosave(){
   // 不能暫存就連算都不要算——encodeTree 對幾十萬個三角形是有成本的，
   // 算出一個沒地方放的字串是白花力氣。
-  if(!storeOK){saveChars=0;saveFull=false;saveLost=0;return;}
+  if(STORE.mode==='none'){saveChars=0;saveFull=false;saveLost=0;return;}
   const str=encodeTree({roots,uid});
   saveChars=str.length;
-  try{localStorage.setItem(LS_KEY,str);saveFull=false;saveLost=0;return;}
+  try{await storePut(str);saveFull=false;saveLost=0;regauge();return;}
   catch(e){}
   // 塞不下：退一步，只放棄匯入的三角形
   lostCount=0;
   const lite=stripMesh(roots);
   try{
-    localStorage.setItem(LS_KEY,encodeTree({roots:lite,uid}));
+    await storePut(encodeTree({roots:lite,uid}));
     saveFull=true;saveLost=lostCount;
   }catch(e){
     // 連這樣都塞不下（幾乎不會發生），至少不要留一份半舊的在那裡騙人
-    try{localStorage.removeItem(LS_KEY);}catch(e2){}
+    await storeDrop();
     saveFull=true;saveLost=-1;
   }
+  regauge();
 }
 /* 圓角方塊曾經是獨立的形狀（shape:'rbox'），後來併回方塊。
    舊的暫存或存檔可能還帶著它，讀進來時就地換掉。 */
@@ -2675,10 +2765,10 @@ function countLost(list){
   }
   return out;
 }
-function autoload(){
-  if(!storeOK)return false;
+async function autoload(){
+  if(STORE.mode==='none')return false;
   try{
-    const s=localStorage.getItem(LS_KEY);
+    const s=await storeGet();
     if(!s)return false;
     const d=JSON.parse(s);
     if(!Array.isArray(d.roots)||!d.roots.length)return false;
@@ -2688,6 +2778,11 @@ function autoload(){
       '上次暫存的空間不夠，這些匯入的模型只留下位置和尺寸：\n\n'+
       lost.map(s=>'　・'+s).join('\n')+
       '\n\n畫面上它們現在是空框。重新匯入原本的檔案就可以接回去。'),50);
+    // 從小格子撿回來的（這台電腦剛好開始有大倉庫可以用）：搬進大倉庫、
+    // 小格子那一份刪掉，免得下次大倉庫被擋時又讀到一份舊的騙人。
+    if(STORE.mode==='idb'){
+      try{await storePut(encodeTree({roots,uid}));localStorage.removeItem(LS_KEY);}catch(e){}
+    }
     return true;
   }catch(e){return false;}
 }
@@ -2728,7 +2823,27 @@ function updateSaveRow(){
 }
 setInterval(updateSaveRow,30000);   // 讓「幾分鐘前」自己跟著走
 
+/* 暫存是非同步寫進去的（IndexedDB），寫完才知道成不成功，
+   所以要能用上一次的數字把油表重畫一遍。 */
+let lastTris=0,lastMs=0;
+function regauge(){updateGauge(lastTris,lastMs);}
+function mb(n){
+  return n>=1e9? (n/1e9).toFixed(1)+'GB' : n>=1e6? (n/1e6).toFixed(1)+'MB'
+       : n>=1e3? Math.round(n/1e3)+'KB' : Math.round(n)+'B';
+}
+function updateStoreRow(){
+  const el=document.getElementById('gStore');
+  if(STORE.mode==='idb')
+    el.textContent='暫存：大倉庫（這台電腦允許，約 '+mb(STORE.quota)+'）';
+  else if(STORE.mode==='ls')
+    el.textContent='暫存：小格子（上限約 5MB，塞不下時只留清單）';
+  else
+    el.textContent='不能自動暫存，關掉就沒了——記得自己存檔';
+  el.className='mode'+(STORE.mode==='none'?' bad':'');
+}
+
 function updateGauge(tris,ms){
+  lastTris=tris;lastMs=ms;
   setBar('gFace',tris/GAUGE_MAX.face);
   setBar('gMs',ms/GAUGE_MAX.ms);
   document.getElementById('gFaceN').textContent=
@@ -2738,30 +2853,29 @@ function updateGauge(tris,ms){
   // 因為「沒有這個東西」跟「還沒用到」是兩件事。
   const memTrack=document.getElementById('gMem').parentNode;
   const memVal=document.getElementById('gMemN');
-  if(storeOK){
+  if(STORE.mode!=='none'){
     memTrack.className='track';memVal.className='val';
-    setBar('gMem',saveChars/GAUGE_MAX.mem);
-    const memPct=saveChars/GAUGE_MAX.mem*100;
-    memVal.textContent=(memPct>0&&memPct<1)?'<1%':memPct.toFixed(0)+'%';
+    setBar('gMem',saveChars/STORE.quota);
+    // 大倉庫的百分比永遠是 0%，那個數字沒有意義，改印實際佔多少
+    memVal.textContent = STORE.mode==='idb' ? mb(saveChars)
+      : ((saveChars/STORE.quota*100)>0&&(saveChars/STORE.quota*100)<1)
+        ? '<1%' : (saveChars/STORE.quota*100).toFixed(0)+'%';
   }else{
     memTrack.className='track off';memVal.className='val off';
     document.getElementById('gMem').style.width='0';
     memVal.textContent='無';
   }
-  updateSaveRow();
+  updateSaveRow();updateStoreRow();
   const note=document.getElementById('gNote');
-  let msg='',calm=false;
+  let msg='';
   if(buildFail)msg='有物件算不出來，面數太高了';
   else if(saveLost>0)msg='暫存不夠，匯入的模型沒存到（其他都在），請手動存檔！';
   else if(saveFull)msg='暫存已滿，請手動存檔！';
-  else if(storeOK&&saveChars/GAUGE_MAX.mem>=.8)msg='暫存快滿了，記得存檔';
+  else if(STORE.mode!=='none'&&saveChars/STORE.quota>=.8)msg='暫存快滿了，記得存檔';
   else if(ms/GAUGE_MAX.ms>=.5)msg='每次放開滑鼠都要重算這麼久，動之前先想一下';
   else if(tris/GAUGE_MAX.face>=.8)msg='面數偏高，操作會變慢';
-  // 不能暫存是常駐狀態不是警報，所以擺在最後、而且用淡的字：一直紅字喊
-  // 反而會被當成背景，真正的警告就看不見了。
-  else if(!storeOK){msg='這台電腦不能自動暫存，關掉就沒了——記得自己存檔';calm=true;}
   note.textContent=msg;
-  note.className='note'+(calm?' calm':'');
+  note.className='note';
   note.style.display=msg?'block':'none';
 }
 
@@ -3888,15 +4002,21 @@ function drawPalette(){
 }
 buildPalette();
 
-/* ---- 起手式：先試著接續上次，沒有的話給一個範例 ---- */
-(function seed(){
-  if(autoload())return;
-  const b=makeShape('box');b.size=[40,24,30];b.pos=[0,12,0];
-  const c=makeShape('cylinder');c.size=[14,40,14];c.pos=[0,12,0];c.role='hole';
-  roots=[b,c];selected=[];
-})();
+/* ---- 起手式：先試著接續上次，沒有的話給一個範例 ----
+   IndexedDB 是非同步的，所以要等倉庫回話再決定放不放範例——不然會看到
+   範例閃一下才被暫存蓋掉。 */
 document.getElementById('busyStop').onclick=cancelJob;
-resize();updateCam();rebuild();
+resize();updateCam();
+(async function seed(){
+  await probeStore();
+  updateStoreRow();
+  if(!await autoload()){
+    const b=makeShape('box');b.size=[40,24,30];b.pos=[0,12,0];
+    const c=makeShape('cylinder');c.size=[14,40,14];c.pos=[0,12,0];c.role='hole';
+    roots=[b,c];selected=[];
+  }
+  rebuild();
+})();
 (function loop(){requestAnimationFrame(loop);renderer.render(scene,camera);drawPalette();})();
 </script>
 </body>
