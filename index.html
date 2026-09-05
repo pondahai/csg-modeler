@@ -607,7 +607,11 @@ class Bsp {
   /* 每個節點記住「我這一支底下的東西佔哪個範圍」。後序走訪算一遍就好，
      只有 buildG 加進新的多邊形時才需要重算（clipTo 只會讓多邊形變少，
      舊盒子仍然罩得住，當成保守估計繼續用是安全的）。 */
-  ensureBoxes(){
+  ensureBoxes(){drain(this.ensureBoxesG());}
+  /* 這三個（ensureBoxes／invert／allPolygons）都是「走一遍整棵樹」，
+     成本跟面數成正比，所以也要切段——64k 面實測分別是 377／178／57ms，
+     合起來就是一個 848ms 的卡頓，面數再上去就會撞到「網頁沒有回應」。 */
+  *ensureBoxesG(){
     if(this.boxOk)return;
     const order=[],st=[this];
     while(st.length){
@@ -615,6 +619,7 @@ class Bsp {
       if(n.front)st.push(n.front);
       if(n.back)st.push(n.back);
     }
+    let budget=YIELD_EVERY;
     for(let i=order.length-1;i>=0;i--){
       const n=order[i];
       let x0=Infinity,y0=Infinity,z0=Infinity,x1=-Infinity,y1=-Infinity,z1=-Infinity;
@@ -632,6 +637,7 @@ class Bsp {
       }
       n.box=(x0<=x1)?[x0,y0,z0,x1,y1,z1]:null;
       n.boxOk=true;
+      if(--budget<=0){budget=YIELD_EVERY;yield;}
     }
   }
   clone(){
@@ -647,10 +653,12 @@ class Bsp {
     }
     return root;
   }
-  invert(){
+  invert(){drain(this.invertG());}
+  *invertG(){
     /* 反轉之後這棵樹代表的是「補集」——原本實體外面的全部變成實體。
        盒子剪枝的前提（實體一定在盒子裡）因此顛倒，靠 st 記著現在是哪一邊。 */
     const stack=[this];
+    let budget=YIELD_EVERY;
     while(stack.length){
       const n=stack.pop();
       n.st^=1;                       // 裡外對調
@@ -659,6 +667,7 @@ class Bsp {
       const t=n.front;n.front=n.back;n.back=t;
       if(n.front)stack.push(n.front);
       if(n.back)stack.push(n.back);
+      if((budget-=n.polygons.length+1)<=0){budget=YIELD_EVERY;yield;}
     }
   }
   *clipPolygonsG(polys){
@@ -666,7 +675,7 @@ class Bsp {
     /* 先篩掉離這棵樹很遠的：它們一定落在原本那個實體的外面，答案不必
        走一趟樹也知道——沒反轉時整個留下，反轉（補集）時整個丟掉。
        大模型挖小洞時這一關就打發掉九成以上的面。 */
-    this.ensureBoxes();
+    yield* this.ensureBoxesG();
     let todo=polys;
     if(this.box&&polys.length){
       const near=[],keepFar=this.st===0;
@@ -702,7 +711,7 @@ class Bsp {
        都在對方外面，clip 之後原封不動，連走都不必走進去。
        對方反轉過（代表補集）時這條不成立，那時候交給 clipPolygonsG
        裡面那一關逐個處理。 */
-    bsp.ensureBoxes();this.ensureBoxes();
+    yield* bsp.ensureBoxesG();yield* this.ensureBoxesG();
     const B=bsp.st?null:bsp.box;
     const stack=[this];
     while(stack.length){
@@ -747,14 +756,17 @@ class Bsp {
   clipPolygons(polys){return drain(this.clipPolygonsG(polys));}
   clipTo(bsp){return drain(this.clipToG(bsp));}
   build(polys){return drain(this.buildG(polys));}
-  allPolygons(){
+  allPolygons(){return drain(this.allPolygonsG());}
+  *allPolygonsG(){
     const out=[];
     const stack=[this];
+    let budget=YIELD_EVERY;
     while(stack.length){
       const n=stack.pop();
       for(const p of n.polygons)out.push(p);
       if(n.back)stack.push(n.back);
       if(n.front)stack.push(n.front);
+      if((budget-=n.polygons.length+1)<=0){budget=YIELD_EVERY;yield;}
     }
     return out;
   }
@@ -768,23 +780,31 @@ function* csgG(pa,pb,op){
   yield* a.buildG(pa);
   yield* b.buildG(pb);
   if(op==='union'){
-    yield* a.clipToG(b); yield* b.clipToG(a); b.invert(); yield* b.clipToG(a); b.invert();
-    yield* a.buildG(b.allPolygons()); return a.allPolygons();
+    yield* a.clipToG(b); yield* b.clipToG(a); yield* b.invertG(); yield* b.clipToG(a); yield* b.invertG();
+    yield* a.buildG(yield* b.allPolygonsG()); return yield* a.allPolygonsG();
   }
   if(op==='subtract'){
-    a.invert(); yield* a.clipToG(b); yield* b.clipToG(a); b.invert(); yield* b.clipToG(a); b.invert();
-    yield* a.buildG(b.allPolygons()); a.invert(); return a.allPolygons();
+    yield* a.invertG(); yield* a.clipToG(b); yield* b.clipToG(a); yield* b.invertG(); yield* b.clipToG(a); yield* b.invertG();
+    yield* a.buildG(yield* b.allPolygonsG()); yield* a.invertG(); return yield* a.allPolygonsG();
   }
-  a.invert(); yield* b.clipToG(a); b.invert(); yield* a.clipToG(b); yield* b.clipToG(a);
-  yield* a.buildG(b.allPolygons()); a.invert(); return a.allPolygons();
+  yield* a.invertG(); yield* b.clipToG(a); yield* b.invertG(); yield* a.clipToG(b); yield* b.clipToG(a);
+  yield* a.buildG(yield* b.allPolygonsG()); yield* a.invertG(); return yield* a.allPolygonsG();
 }
 function csg(pa,pb,op){return drain(csgG(pa,pb,op));}
 /* 直接把矩陣套在多邊形上。
    以前是 polysToGeo → applyMatrix4 → geoToPolys 繞一圈，那會把多邊形
    全部切成三角形，還會在轉回來時丟掉退化的碎片，等於每包一層組合就
    累積一次誤差、破一次洞。直接搬頂點就沒有這個問題，也快得多。 */
-function transformPolys(polys,m){
+/* 這三個（transformPolys／geoToPolys／polysToGeo）也要切段。
+   BSP 那邊早就切了，但這三個是「一口氣跑完」的迴圈，而它們處理的量跟
+   面數成正比：實測 64k 面的組合，transformPolys 單獨一次就佔住主執行緒
+   1.07 秒、polysToGeo 0.58 秒、geoToPolys 0.55 秒。面數再上去就是好幾秒，
+   幾個最上層物件接在一起，瀏覽器就會跳「網頁沒有回應」——分段跑的意義
+   在於「沒有任何一次 next() 會很久」，漏掉一個就破功了。
+   同步版留著給匯出用（drain 一口氣跑完）。 */
+function* transformPolysG(polys,m){
   const out=[];
+  let budget=YIELD_EVERY;
   const t=new THREE.Vector3();
   /* 鏡像（行列式為負）會把三角形的正反面翻過來：頂點順序不動的話，
      Newell 算出來的法向量會指向實體內部，而朝內的面會被布林運算當成
@@ -799,33 +819,41 @@ function transformPolys(polys,m){
     const n=newellNormal(vs);
     if(!n)continue;                       // 真的壓成一條線了才丟掉
     out.push(new Poly(vs,new Plane(n,n.dot(vs[0].pos))));
+    if(--budget<=0){budget=YIELD_EVERY;yield;}
   }
   return out;
 }
-function geoToPolys(g){
+function transformPolys(polys,m){return drain(transformPolysG(polys,m));}
+function* geoToPolysG(g){
   const p=g.attributes.position, out=[];
+  let budget=YIELD_EVERY;
   for(let i=0;i<p.count;i+=3){
     const vs=[0,1,2].map(k=>new Vtx(new V(p.getX(i+k),p.getY(i+k),p.getZ(i+k))));
     const d1=vs[1].pos.minus(vs[0].pos), d2=vs[2].pos.minus(vs[0].pos);
     if(d1.cross(d2).dot(d1.cross(d2))<1e-20)continue;   // 丟掉退化三角形
     out.push(new Poly(vs));
+    if(--budget<=0){budget=YIELD_EVERY;yield;}
   }
   return out;
 }
-function polysToGeo(polys){
+function geoToPolys(g){return drain(geoToPolysG(g));}
+function* polysToGeoG(polys){
   const pos=[],nor=[];
+  let budget=YIELD_EVERY;
   for(const poly of polys){
     const n=poly.plane.normal;
     for(let i=2;i<poly.vertices.length;i++){
       const t=[poly.vertices[0],poly.vertices[i-1],poly.vertices[i]];
       for(const v of t){pos.push(v.pos.x,v.pos.y,v.pos.z);nor.push(n.x,n.y,n.z);}
     }
+    if(--budget<=0){budget=YIELD_EVERY;yield;}
   }
   const g=new THREE.BufferGeometry();
   g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
   g.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));
   return g;
 }
+function polysToGeo(polys){return drain(polysToGeoG(polys));}
 
 /* ============================================================
    2. 場景資料：一棵樹。組合不會吃掉原料，只是多一層節點。
@@ -1031,7 +1059,7 @@ function* evalNodeG(n){
   if(n.kind==='shape'){
     const g=nonIndexed(baseGeo(n));
     applyNodeMatrix(g,matrixOf(n));
-    polys=geoToPolys(g);
+    polys=yield* geoToPolysG(g);
     g.dispose();
   } else if(n.kind==='mesh'){
     // 匯入的三角形存成「塞進 1×1×1 方框」的樣子，實際尺寸一樣靠 size 縮放，
@@ -1039,9 +1067,8 @@ function* evalNodeG(n){
     const g=new THREE.BufferGeometry();
     g.setAttribute('position',new THREE.Float32BufferAttribute(Float32Array.from(n.tri),3));
     applyNodeMatrix(g,matrixOf(n));
-    polys=geoToPolys(g);
+    polys=yield* geoToPolysG(g);
     g.dispose();
-    yield;                       // 匯入的模型可能幾十萬個三角形，這裡先喘一口
   } else {
     let acc=null;
     for(const c of n.children){
@@ -1055,7 +1082,7 @@ function* evalNodeG(n){
       if(!acc.length)break;
       acc=yield* csgG(acc,yield* evalNodeG(c),'subtract');
     }
-    polys=transformPolys(acc,matrixOf(n));
+    polys=yield* transformPolysG(acc,matrixOf(n));
   }
   return polys;
 }
@@ -1273,7 +1300,7 @@ function* geoForRootG(n){
     return geo;
   }
   let geo,ok=true;
-  try{ geo=polysToGeo(yield* evalNodeG(n)); }
+  try{ geo=yield* polysToGeoG(yield* evalNodeG(n)); }
   catch(e){ console.warn(e); geo=new THREE.BufferGeometry(); buildFail++; ok=false; }
   if(ok){                       // 算失敗的不要進快取，否則永遠不會再試一次
     if(c)c.geo.dispose();

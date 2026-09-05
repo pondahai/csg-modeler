@@ -86,11 +86,26 @@ pos/rot/size/post，不再連幾十萬個三角形一起複製。新增拖曳類
 **先判斷真的有變化，再 `beginEdit()`。**
 
 **重算是「切成一小段」跑的，不是一口氣算完。** `Bsp.buildG/clipPolygonsG/
-clipToG`、`csgG`、`evalNodeG` 都是 generator，每處理 `YIELD_EVERY`（6000）個
+clipToG/ensureBoxesG/invertG/allPolygonsG`、`csgG`、`evalNodeG`、
+`transformPolysG/geoToPolysG/polysToGeoG` 都是 generator，每處理 `YIELD_EVERY`（6000）個
 多邊形就 yield 一次；`rebuild()` 每次只跑 `SLICE`（25ms）就把主執行緒還給
 瀏覽器，所以算很久時畫面還會動、可以按取消，也不會再跳「網頁無回應」。
 還控制權用 `MessageChannel`（`soon()`），不要換成 `setTimeout(0)`——後者被
 瀏覽器強制最少等 4ms，大模型會被拖慢一大截。
+
+**「切段」要切到沒有任何一次 `next()` 會很久，漏掉一個就破功。** 使用者回報
+開檔重算時跳出「網頁沒有回應」——BSP 那邊早就切了，但六個「走一遍整棵樹／
+整包多邊形」的函式還是一口氣跑完，而它們的成本跟面數成正比。64k 面實測：
+`transformPolys` 1068ms、`polysToGeo` 576ms、`geoToPolys` 553ms、
+`ensureBoxes` 377ms、`invert` 178ms、`allPolygons` 57ms，接在一起就是
+2 秒的卡頓；面數再上去就會撞到瀏覽器的無回應警告。全部改成 generator 之後
+同一個場景最久的一次從 2017ms 降到 256ms。**新增這類「掃過所有多邊形」的
+函式時要一起切段，並且用 longtask 實際量過**（`PerformanceObserver` 收
+`longtask`，看最長那一次有多久），不要只看總時間。
+
+改完一定要驗算出來的東西沒變：拿改動前的版本並排跑同一組場景，比對
+**體積、面數、包圍盒**（方塊挖圓柱／巢狀組合帶旋轉和 post／鏡像組合三種都要）。
+這次三項全部逐位相同。
 
 **Web Worker 不能用。** file:// 下瀏覽器會擋掉，而這個工具必須能從隨身碟
 雙擊直接開。切段是唯一可行的解，不要再提議搬到背景執行緒。
