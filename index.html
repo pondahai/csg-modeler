@@ -187,7 +187,10 @@
   #gauge .lbl{width:34px;flex:none;}
   #gauge .val{width:52px;flex:none;text-align:right;}
   #gauge .track{flex:1;height:6px;border-radius:3px;background:var(--ink);overflow:hidden;}
-  #gauge .fill{height:100%;width:0;background:#5aa469;transition:width .18s linear;}
+  /* display:block 一定要有。fill 是個 <span>，預設是行內文字，而行內文字不吃
+     寬高——少了這行，油針算得再準也永遠是 0×0，畫面上只看得到底槽。 */
+  #gauge .fill{display:block;height:100%;width:0;background:#5aa469;
+               transition:width .18s linear;}
   #gauge .fill.warn{background:#e0a13b;}
   #gauge .fill.hot{background:#d2523f;}
   #gauge .note{margin-top:5px;color:#f0836e;font-weight:600;display:none;white-space:normal;line-height:1.35;}
@@ -2583,7 +2586,9 @@ const GAUGE_MAX={face:400000, mem:5e6, ms:60000};
 function setBar(id,ratio){
   const el=document.getElementById(id);
   const r=Math.min(1,ratio);
-  el.style.width=(r*100).toFixed(1)+'%';
+  // 只要不是零就至少露出 3px。一般建模面數只有兩三百，佔滿格的 0.05%，
+  // 照實畫不到半個像素，看起來就像油表壞了。真正的數字就在右邊，不會誤導。
+  el.style.width=r>0?'max(3px,'+(r*100).toFixed(1)+'%)':'0';
   el.className='fill'+(r>=.8?' hot':r>=.5?' warn':'');
 }
 function updateGauge(tris,ms){
