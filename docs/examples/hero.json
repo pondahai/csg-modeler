@@ -1,0 +1,747 @@
+{
+ "format": "csg-modeler",
+ "version": 1,
+ "unit": "mm",
+ "roots": [
+  {
+   "id": 11,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "cylinder",
+   "size": [
+    9,
+    34,
+    9
+   ],
+   "pos": [
+    -110,
+    17,
+    -20
+   ],
+   "color": "#8a5a34",
+   "name": "樹幹"
+  },
+  {
+   "id": 12,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "sphere",
+   "size": [
+    36,
+    32,
+    36
+   ],
+   "pos": [
+    -110,
+    46,
+    -20
+   ],
+   "color": "#4f9a5c",
+   "name": "樹冠"
+  },
+  {
+   "id": 13,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "sphere",
+   "size": [
+    24,
+    22,
+    24
+   ],
+   "pos": [
+    -124,
+    38,
+    -14
+   ],
+   "color": "#5aa96a",
+   "name": "樹冠"
+  },
+  {
+   "id": 14,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "sphere",
+   "size": [
+    22,
+    20,
+    22
+   ],
+   "pos": [
+    -97,
+    40,
+    -27
+   ],
+   "color": "#3f8a50",
+   "name": "樹冠"
+  },
+  {
+   "id": 15,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "sphere",
+   "size": [
+    18,
+    16,
+    18
+   ],
+   "pos": [
+    -106,
+    60,
+    -16
+   ],
+   "color": "#5aa96a",
+   "name": "樹冠"
+  },
+  {
+   "id": 16,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    35
+   ],
+   "shape": "cylinder",
+   "size": [
+    7,
+    14,
+    7
+   ],
+   "pos": [
+    -119,
+    26,
+    -16
+   ],
+   "color": "#8a5a34",
+   "name": "枝"
+  },
+  {
+   "id": 17,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    -32
+   ],
+   "shape": "cylinder",
+   "size": [
+    7,
+    13,
+    7
+   ],
+   "pos": [
+    -101,
+    28,
+    -24
+   ],
+   "color": "#8a5a34",
+   "name": "枝"
+  },
+  {
+   "id": 18,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "dome",
+   "size": [
+    46,
+    6,
+    46
+   ],
+   "pos": [
+    -110,
+    1,
+    -20
+   ],
+   "color": "#7d9a55",
+   "name": "草地"
+  },
+  {
+   "id": 19,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    90,
+    0,
+    0
+   ],
+   "shape": "cylinder",
+   "size": [
+    14,
+    72,
+    14
+   ],
+   "pos": [
+    95,
+    28,
+    -25
+   ],
+   "color": "#e6ebf2",
+   "name": "機身"
+  },
+  {
+   "id": 20,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    -90,
+    0,
+    0
+   ],
+   "shape": "cone",
+   "size": [
+    14,
+    18,
+    14
+   ],
+   "pos": [
+    95,
+    28,
+    -70
+   ],
+   "color": "#c94f3d",
+   "name": "機鼻"
+  },
+  {
+   "id": 21,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    90,
+    0,
+    0
+   ],
+   "shape": "cone",
+   "size": [
+    14,
+    16,
+    14
+   ],
+   "pos": [
+    95,
+    28,
+    19
+   ],
+   "color": "#e6ebf2",
+   "name": "機尾"
+  },
+  {
+   "id": 22,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "box",
+   "size": [
+    84,
+    3,
+    18
+   ],
+   "pos": [
+    95,
+    26,
+    -29
+   ],
+   "color": "#9fb4cf",
+   "name": "主翼"
+  },
+  {
+   "id": 23,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "box",
+   "size": [
+    32,
+    3,
+    11
+   ],
+   "pos": [
+    95,
+    28,
+    9
+   ],
+   "color": "#9fb4cf",
+   "name": "水平尾翼"
+  },
+  {
+   "id": 24,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    90,
+    0
+   ],
+   "shape": "wedge",
+   "size": [
+    3,
+    17,
+    17
+   ],
+   "pos": [
+    95,
+    36,
+    11
+   ],
+   "color": "#c94f3d",
+   "name": "垂直尾翼"
+  },
+  {
+   "id": 25,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "sphere",
+   "size": [
+    12,
+    10,
+    16
+   ],
+   "pos": [
+    95,
+    34,
+    -39
+   ],
+   "color": "#5fa8d6",
+   "name": "座艙罩"
+  },
+  {
+   "id": 26,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "box",
+   "size": [
+    4,
+    27,
+    2
+   ],
+   "pos": [
+    95,
+    28,
+    -80
+   ],
+   "color": "#8a93a3",
+   "name": "螺旋槳"
+  },
+  {
+   "id": 27,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    90
+   ],
+   "shape": "box",
+   "size": [
+    4,
+    27,
+    2
+   ],
+   "pos": [
+    95,
+    28,
+    -80
+   ],
+   "color": "#8a93a3",
+   "name": "螺旋槳"
+  },
+  {
+   "id": 28,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "sphere",
+   "size": [
+    7,
+    7,
+    7
+   ],
+   "pos": [
+    95,
+    28,
+    -80
+   ],
+   "color": "#e0a83c",
+   "name": "槳轂"
+  },
+  {
+   "id": 29,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "cylinder",
+   "size": [
+    3,
+    12,
+    3
+   ],
+   "pos": [
+    75,
+    15,
+    -29
+   ],
+   "color": "#8a93a3",
+   "name": "起落架"
+  },
+  {
+   "id": 30,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "cylinder",
+   "size": [
+    3,
+    12,
+    3
+   ],
+   "pos": [
+    115,
+    15,
+    -29
+   ],
+   "color": "#8a93a3",
+   "name": "起落架"
+  },
+  {
+   "id": 31,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    90
+   ],
+   "shape": "cylinder",
+   "size": [
+    10,
+    4,
+    10
+   ],
+   "pos": [
+    75,
+    5,
+    -29
+   ],
+   "color": "#4a4f57",
+   "name": "輪子"
+  },
+  {
+   "id": 32,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    90
+   ],
+   "shape": "cylinder",
+   "size": [
+    10,
+    4,
+    10
+   ],
+   "pos": [
+    115,
+    5,
+    -29
+   ],
+   "color": "#4a4f57",
+   "name": "輪子"
+  },
+  {
+   "id": 1,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "box",
+   "size": [
+    20,
+    20,
+    20
+   ],
+   "color": "#5b8dd6",
+   "name": "方塊",
+   "pos": [
+    -77,
+    10,
+    58
+   ]
+  },
+  {
+   "id": 2,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "box",
+   "size": [
+    20,
+    20,
+    20
+   ],
+   "color": "#5b8dd6",
+   "name": "圓角方塊",
+   "r": 5,
+   "pos": [
+    -41,
+    10,
+    58
+   ]
+  },
+  {
+   "id": 3,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "cylinder",
+   "size": [
+    20,
+    20,
+    20
+   ],
+   "color": "#e0a83c",
+   "name": "圓柱",
+   "pos": [
+    -5,
+    10,
+    58
+   ]
+  },
+  {
+   "id": 4,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "cone",
+   "size": [
+    20,
+    20,
+    20
+   ],
+   "color": "#e08a3c",
+   "name": "圓錐",
+   "pos": [
+    31,
+    10,
+    58
+   ]
+  },
+  {
+   "id": 5,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "sphere",
+   "size": [
+    20,
+    20,
+    20
+   ],
+   "color": "#6fb98f",
+   "name": "球",
+   "pos": [
+    67,
+    10,
+    58
+   ]
+  },
+  {
+   "id": 6,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "dome",
+   "size": [
+    20,
+    10,
+    20
+   ],
+   "color": "#5fae9c",
+   "name": "半球",
+   "pos": [
+    -77,
+    5,
+    102
+   ]
+  },
+  {
+   "id": 7,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "wedge",
+   "size": [
+    20,
+    20,
+    20
+   ],
+   "color": "#c9705f",
+   "name": "楔形",
+   "pos": [
+    -41,
+    10,
+    102
+   ]
+  },
+  {
+   "id": 8,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "prism",
+   "size": [
+    20,
+    20,
+    20
+   ],
+   "color": "#8f9bd6",
+   "name": "六邊形柱",
+   "sides": 6,
+   "pos": [
+    -5,
+    10,
+    102
+   ]
+  },
+  {
+   "id": 9,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "tube",
+   "size": [
+    20,
+    20,
+    20
+   ],
+   "color": "#d6a05b",
+   "name": "圓管",
+   "t": 3,
+   "pos": [
+    31,
+    10,
+    102
+   ]
+  },
+  {
+   "id": 10,
+   "kind": "shape",
+   "role": "hole",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "box",
+   "size": [
+    20,
+    20,
+    20
+   ],
+   "color": "#c0392b",
+   "name": "孔洞",
+   "pos": [
+    67,
+    10,
+    102
+   ]
+  }
+ ],
+ "uid": 33
+}
