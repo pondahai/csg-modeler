@@ -1,0 +1,241 @@
+{
+ "format": "csg-modeler",
+ "version": 1,
+ "unit": "mm",
+ "roots": [
+  {
+   "id": 1,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "box",
+   "size": [
+    20,
+    20,
+    20
+   ],
+   "color": "#5b8dd6",
+   "name": "方塊",
+   "pos": [
+    -72,
+    10,
+    -22
+   ]
+  },
+  {
+   "id": 2,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "box",
+   "size": [
+    20,
+    20,
+    20
+   ],
+   "color": "#5b8dd6",
+   "name": "圓角方塊",
+   "r": 5,
+   "pos": [
+    -36,
+    10,
+    -22
+   ]
+  },
+  {
+   "id": 3,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "cylinder",
+   "size": [
+    20,
+    20,
+    20
+   ],
+   "color": "#e0a83c",
+   "name": "圓柱",
+   "pos": [
+    0,
+    10,
+    -22
+   ]
+  },
+  {
+   "id": 4,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "cone",
+   "size": [
+    20,
+    20,
+    20
+   ],
+   "color": "#e08a3c",
+   "name": "圓錐",
+   "pos": [
+    36,
+    10,
+    -22
+   ]
+  },
+  {
+   "id": 5,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "sphere",
+   "size": [
+    20,
+    20,
+    20
+   ],
+   "color": "#6fb98f",
+   "name": "球",
+   "pos": [
+    72,
+    10,
+    -22
+   ]
+  },
+  {
+   "id": 6,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "dome",
+   "size": [
+    20,
+    10,
+    20
+   ],
+   "color": "#5fae9c",
+   "name": "半球",
+   "pos": [
+    -72,
+    5,
+    22
+   ]
+  },
+  {
+   "id": 7,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "wedge",
+   "size": [
+    20,
+    20,
+    20
+   ],
+   "color": "#c9705f",
+   "name": "楔形",
+   "pos": [
+    -36,
+    10,
+    22
+   ]
+  },
+  {
+   "id": 8,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "prism",
+   "size": [
+    20,
+    20,
+    20
+   ],
+   "color": "#8f9bd6",
+   "name": "六邊形柱",
+   "sides": 6,
+   "pos": [
+    0,
+    10,
+    22
+   ]
+  },
+  {
+   "id": 9,
+   "kind": "shape",
+   "role": "solid",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "tube",
+   "size": [
+    20,
+    20,
+    20
+   ],
+   "color": "#d6a05b",
+   "name": "圓管",
+   "t": 3,
+   "pos": [
+    36,
+    10,
+    22
+   ]
+  },
+  {
+   "id": 10,
+   "kind": "shape",
+   "role": "hole",
+   "rot": [
+    0,
+    0,
+    0
+   ],
+   "shape": "box",
+   "size": [
+    20,
+    20,
+    20
+   ],
+   "color": "#c0392b",
+   "name": "孔洞",
+   "pos": [
+    72,
+    10,
+    22
+   ]
+  }
+ ],
+ "uid": 11
+}
