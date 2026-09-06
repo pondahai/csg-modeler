@@ -130,6 +130,20 @@
   .node .rl{color:var(--dim);font-size:11px;}
   .node .fc{margin-left:auto;padding-left:6px;color:var(--dim);font-size:10px;
             font-variant-numeric:tabular-nums;flex:none;}
+  /* 燈泡：平常淡淡的，滑過去才亮；藏起來的一直亮著，
+     因為那時候它是「這個東西現在是關的」的唯一記號 */
+  .node .hb{flex:none;width:16px;text-align:center;background:none;border:none;
+            color:var(--dim);cursor:pointer;font-size:11px;padding:0;opacity:0;}
+  .node:hover .hb,.node.off .hb{opacity:1;}
+  .node .hb:hover{color:var(--text);}
+  .node.off{opacity:.5;}
+  .node.off .fc{text-decoration:line-through;}
+  /* 藏了幾個、按一下全部叫回來。釘在物件樹最上面，不跟著捲走 */
+  #hidBar{display:flex;align-items:center;gap:6px;padding:3px 6px;margin-bottom:4px;
+          border-radius:4px;background:var(--panel-2);color:var(--dim);font-size:11px;}
+  #hidBar button{margin-left:auto;background:none;border:1px solid var(--line);
+          color:var(--dim);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;}
+  #hidBar button:hover{color:var(--text);border-color:var(--dim);}
   .kids{margin-left:13px;border-left:1px solid var(--line);padding-left:6px;}
   .row{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
   .row label{width:16px;color:var(--dim);}
@@ -307,7 +321,7 @@
 </div>
 
 <aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="row"><span class="lbl">存檔</span><span class="sv never" id="gSaveN">從沒存過</span></div><div class="mode" id="gStore"></div><div class="note" id="gNote"></div></div></aside>
-<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><button id="hintBtn" type="button" title="操作說明">?</button><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<br>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>方向鍵＝推動選取的物件（以目前視角為準）　Ctrl＋上下＝調高度　加按 Shift＝一次走十倍<br>按住 Ctrl 拖物件＝讓它坐到下面那個東西的表面上　拖到一半按 Esc＝取消這次動作</div></div>
+<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><button id="hintBtn" type="button" title="操作說明">?</button><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<br>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>方向鍵＝推動選取的物件（以目前視角為準）　Ctrl＋上下＝調高度　加按 Shift＝一次走十倍<br>按住 Ctrl 拖物件＝讓它坐到下面那個東西的表面上　拖到一半按 Esc＝取消這次動作<br>Ctrl+H＝把選取的東西藏起來／叫回來（物件樹上的燈泡也可以）</div></div>
 <div id="dim"></div>
 <div id="svgDlgBg" class="dlgBg"><div id="svgDlg" class="dlg">
   <h3>匯入 SVG</h3>
@@ -1367,6 +1381,7 @@ function* previewPartsG(n,M,grp){
 function* showPreviewsG(){
   previewClear();
   for(const n of roots){
+    if(n.hide)continue;                  // 藏起來的連骨架都不必畫
     const grp=new THREE.Group();
     try{ yield* previewPartsG(n,new THREE.Matrix4(),grp); }
     catch(e){ console.warn(e); }
@@ -1439,6 +1454,7 @@ function addMesh(n,geo){
   }
   const mesh=new THREE.Mesh(geo,mat);
   mesh.userData.id=n.id;
+  mesh.visible=!n.hide;          // 藏起來只是不畫，幾何體照樣算好放著
   objLayer.add(mesh);meshes.push(mesh);
 }
 /* 兩種上場方式：
@@ -1677,6 +1693,7 @@ function applyMarquee(x,y){
   const hit=[];
   if(a.x1-a.x0>=3||a.y1-a.y0>=3){
     for(const m of meshes){
+      if(!m.visible)continue;            // 藏起來的框選也框不到
       const b=screenRectOf(m);
       if(!b)continue;
       if(b.x0<=a.x1&&b.x1>=a.x0&&b.y0<=a.y1&&b.y1>=a.y0)hit.push(m.userData.id);
@@ -1740,7 +1757,7 @@ renderer.domElement.addEventListener('pointerdown',e=>{
     };
     mode='scaleH';return;
   }
-  const hits=ray.intersectObjects(meshes);
+  const hits=ray.intersectObjects(meshes.filter(m=>m.visible));  // 看不見的就點不到
   if(hits.length){
     const id=hits[0].object.userData.id;
     if(e.shiftKey){ selected.includes(id)?selected=selected.filter(s=>s!==id):selected.push(id); }
@@ -1945,6 +1962,7 @@ function surfaceUnder(box,ignore){
   const zs=[box.min.z+iz,(box.min.z+box.max.z)/2,box.max.z-iz];
   const top=box.max.y+1000;
   for(const m of meshes){
+    if(!m.visible)continue;                     // 藏起來的不能當桌面
     if(ignore.includes(m.userData.id))continue;
     const n=findNode(m.userData.id);
     if(!n||n.role==='hole')continue;            // 孔洞不是表面
@@ -2114,6 +2132,39 @@ function faceCount(n){
 function faceText(v){
   return v>=10000?(v/1000).toFixed(0)+'k':v>=1000?(v/1000).toFixed(1)+'k':String(v|0);
 }
+/* ---- 藏起來／叫回來 ----
+   純粹是視覺開關：幾何體、布林運算、匯出全部照舊，只是那個 mesh 不畫。
+   所以完全不必 rebuild()，再大的模型也是一瞬間。
+
+   會進 undo（Ctrl+Z 退得回來），也會存進檔案和暫存——不然關掉重開之後
+   東西還藏著卻沒人記得是誰藏的。
+
+   「哪些東西現在是關的」不可以只留在使用者腦袋裡：物件樹上藏起來的那一列
+   會變淡、燈泡一直亮著，樹的最上面還釘一條「藏起來 N 個 ＋ 全部顯示」。
+   步驟一多才不會找不到東西又想不起來自己關過什麼。 */
+function toggleHide(ids){
+  const list=ids.map(id=>findNode(id)).filter(Boolean);
+  if(!list.length)return;
+  const on=list.some(n=>!n.hide);      // 有任何一個還看得見，就整批藏起來
+  pushUndo();
+  for(const n of list){
+    if(on)n.hide=true; else delete n.hide;
+    const m=meshes.find(x=>x.userData.id===n.id);
+    if(m)m.visible=!n.hide;
+  }
+  if(on)selected=selected.filter(id=>!ids.includes(id));   // 看不見的東西不留在選取裡
+  drawTree();drawInspector();updateHandles();autosave();
+}
+function showAllNodes(){
+  if(!roots.some(n=>n.hide))return;
+  pushUndo();
+  for(const n of roots){
+    delete n.hide;
+    const m=meshes.find(x=>x.userData.id===n.id);
+    if(m)m.visible=true;
+  }
+  drawTree();drawInspector();updateHandles();autosave();
+}
 function drawTree(){
   const host=document.getElementById('treeBody');
   if(!roots.length){host.innerHTML='<div class="empty">還沒有東西。上面加一個形狀。</div>';return;}
@@ -2122,17 +2173,27 @@ function drawTree(){
     for(const n of list){
       const rid=rootId||n.id;
       const col=n.role==='hole'?'var(--hole)':(n.color||(n.kind==='group'?'#9aa7b8':n.color));
-      h+=`<div class="node ${selected.includes(n.id)?'sel':''}" data-root="${rid}">
+      const off=rootId?false:!!n.hide;   // 只有最上層藏得起來（場上一個物件就是一個 mesh）
+      h+=`<div class="node ${selected.includes(n.id)?'sel':''} ${off?'off':''}" data-root="${rid}">
             <span class="dot" style="background:${col}"></span>
             <span>${nodeLabel(n)} #${n.id}</span>
             <span class="rl">${n.role==='hole'?'孔洞':''}</span>
             <span class="fc">${faceText(faceCount(n))} 面</span>
+            ${rootId?'':`<button class="hb" data-hide="${n.id}" title="${off?'顯示（Ctrl+H）':'藏起來（Ctrl+H）'}">${off?'🌑':'💡'}</button>`}
           </div>`;
       if(n.kind==='group')h+=`<div class="kids">${render(n.children,rid)}</div>`;
     }
     return h;
   };
-  host.innerHTML=render(roots,null);
+  const hid=roots.filter(n=>n.hide).length;
+  host.innerHTML=(hid?`<div id="hidBar">🌑 藏起來 ${hid} 個<button id="showAll">全部顯示</button></div>`:'')
+                 +render(roots,null);
+  const sa=document.getElementById('showAll');
+  if(sa)sa.onclick=ev=>{ev.stopPropagation();showAllNodes();};
+  host.querySelectorAll('.hb').forEach(b=>b.onclick=ev=>{
+    ev.stopPropagation();                       // 按燈泡不要順便選到那一列
+    toggleHide([+b.dataset.hide]);
+  });
   host.querySelectorAll('.node').forEach(el=>el.onclick=ev=>{
     const id=+el.dataset.root;
     if(ev.shiftKey){selected.includes(id)?selected=selected.filter(s=>s!==id):selected.push(id);}
@@ -2559,7 +2620,9 @@ addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&k==='g'){e.preventDefault();
     document.getElementById(e.shiftKey?'btnUngroup':'btnGroup').click();}
   if(k==='delete'||k==='backspace')document.getElementById('btnDel').click();
-  if(k==='h'&&selected.length===1){const n=findNode(selected[0]);
+  if((e.ctrlKey||e.metaKey)&&k==='h'){e.preventDefault();
+    selected.length?toggleHide(selected.slice()):showAllNodes();}
+  else if(k==='h'&&!e.ctrlKey&&!e.metaKey&&selected.length===1){const n=findNode(selected[0]);
     pushUndo();n.role=n.role==='hole'?'solid':'hole';rebuild();}
 });
 
