@@ -1327,7 +1327,7 @@ const PREVIEW_WIRE_MAX=2000;            /* 超過這個面數就不畫線框，�
    半透明。線框在密的模型上會糊成灰灰的一團，比實體還難看懂——方塊圓柱這種
    低面數的零件畫線框才看得出「這是骨架、還沒算好」。 */
 function disposeTree(o){
-  o.traverse(c=>{if(c.geometry)c.geometry.dispose();if(c.material)c.material.dispose();});
+  o.traverse(c=>{if(c.geometry)c.geometry.dispose();disposeMat(c.material);});
 }
 function previewClear(){
   for(const o of previews.values()){previewLayer.remove(o);disposeTree(o);}
@@ -1373,12 +1373,50 @@ function* showPreviewsG(){
     if(grp.children.length){previewLayer.add(grp);previews.set(n.id,grp);}
   }
 }
+// 透明度：節點上沒有這個欄位就是完全不透明。下限留 0.05，
+// 全透明的東西看不見卻還點得到，使用者會以為東西不見了
+function clampOpa(v){ return v==null?1:Math.max(.05,Math.min(1,v)); }
+let lastOpa=.5;   // 關掉透明之後再打開，回到上一次拉到的濃淡
+/* 半透明的畫法：一張平均的半透明皮看起來是一團糊的，因為朝著你的那一面
+   和背後那一面用同樣的濃度疊在一起，形狀就消失了。所以拆成兩層畫：
+   先畫背面（暗一點、淡一點＝「這是後面的牆」），再畫正面（亮＝「這是朝著
+   你的表面」）。再加上邊緣越斜越濃（菲涅耳），輪廓就回來了——球和圓柱這種
+   沒有稜線的形狀特別靠這個，不然透明之後根本看不出是顆球。
+   兩層是同一個幾何體切成兩個 group，只是各用一個材質，不多一份三角形。 */
+const XRAY_PATCH=sh=>{
+  sh.fragmentShader=sh.fragmentShader.replace('#include <dithering_fragment>',
+    `#include <dithering_fragment>
+     float fres = pow( 1.0 - abs( dot( normalize( vNormal ),
+                                       normalize( vViewPosition ) ) ), 2.0 );
+     gl_FragColor.a = clamp( mix( gl_FragColor.a * 0.55,
+                                  gl_FragColor.a * 2.1 + 0.30, fres ), 0.0, 1.0 );`);
+};
+function xrayMat(col,op,side,dim){
+  const m=new THREE.MeshPhongMaterial({
+    color:col.clone().multiplyScalar(dim),
+    specular:0x0a0a0a,shininess:16,
+    transparent:true,opacity:op,depthWrite:false,side});
+  m.onBeforeCompile=XRAY_PATCH;
+  m.customProgramCacheKey=()=>'xray';   // 補過的 shader 要跟原版分開快取
+  return m;
+}
+function disposeMat(m){
+  if(Array.isArray(m))m.forEach(x=>x.dispose()); else if(m)m.dispose();
+}
 function addMesh(n,geo){
   const isHole=n.role==='hole';
-  const mat=new THREE.MeshLambertMaterial({
-    color:isHole?0xe8657f:new THREE.Color(n.color||'#5b8dd6'),
-    transparent:isHole,opacity:isHole?.32:1,
-    depthWrite:!isHole,side:THREE.DoubleSide});
+  // 孔洞本來就有自己的半透明畫法，使用者設的透明度只管實體
+  const op=isHole?.32:clampOpa(n.opa);
+  const base=new THREE.Color(isHole?0xe8657f:(n.color||'#5b8dd6'));
+  let mat;
+  if(op>=1){
+    mat=new THREE.MeshLambertMaterial({color:base,side:THREE.DoubleSide});
+  }else{
+    const cnt=geo.getAttribute('position').count;
+    geo.clearGroups();geo.addGroup(0,cnt,0);geo.addGroup(0,cnt,1);
+    mat=[xrayMat(base,op*.55,THREE.BackSide,.55),   // 先畫：背後那一面
+         xrayMat(base,op,THREE.FrontSide,1)];       // 後畫：朝著你的那一面
+  }
   const mesh=new THREE.Mesh(geo,mat);
   mesh.userData.id=n.id;
   objLayer.add(mesh);meshes.push(mesh);
@@ -1415,7 +1453,7 @@ function* rebuildG(my){
     // 算完了才換上去
     my.built=null;
     while(objLayer.children.length){
-      const m=objLayer.children.pop();m.geometry.dispose();m.material.dispose();
+      const m=objLayer.children.pop();m.geometry.dispose();disposeMat(m.material);
     }
     meshes.length=0;
     for(const {n,geo} of built)addMesh(n,geo);
@@ -2063,7 +2101,7 @@ function drawTree(){
     let h='';
     for(const n of list){
       const rid=rootId||n.id;
-      const col=n.role==='hole'?'var(--hole)':(n.kind==='group'?'#9aa7b8':n.color);
+      const col=n.role==='hole'?'var(--hole)':(n.color||(n.kind==='group'?'#9aa7b8':n.color));
       h+=`<div class="node ${selected.includes(n.id)?'sel':''}" data-root="${rid}">
             <span class="dot" style="background:${col}"></span>
             <span>${nodeLabel(n)} #${n.id}</span>
@@ -2270,8 +2308,19 @@ function drawInspector(){
     ${n.shape==='prism'?`<div class="grp"><h2>幾邊形</h2></div>
       <div class="row"><label>N</label>
       <input type="number" step="1" min="3" max="24" id="sides" value="${prismSides(n)}"></div>`:''}
-    ${n.kind!=='group'?`<div class="grp"><h2>顏色</h2></div>
-      <input type="color" value="${n.color}" id="col">`:''}
+    <div class="grp"><h2>顏色</h2></div>
+    <input type="color" value="${n.color||'#5b8dd6'}" id="col">
+    ${n.role==='hole'?'':`
+    <div class="seg" style="margin-top:8px">
+      <button data-opa="0" class="${n.opa==null?'on':''}">不透明</button>
+      <button data-opa="1" class="${n.opa==null?'':'on'}">透明</button>
+    </div>
+    <div class="row" id="opaRow" ${n.opa==null?'hidden':''}>
+      <input type="range" id="opa" min="5" max="95" step="5"
+             value="${Math.round((1-(n.opa==null?lastOpa:clampOpa(n.opa)))*100)}" style="flex:1">
+      <span id="opaV" style="width:34px;text-align:right;color:var(--dim)"
+        >${Math.round((1-(n.opa==null?lastOpa:clampOpa(n.opa)))*100)}%</span>
+    </div>`}
     <div class="grp"><h2>鏡像（繞自己的中心翻）</h2></div>
     <div class="seg">
       <button data-mir="x">左右</button>
@@ -2313,6 +2362,31 @@ function drawInspector(){
     pushUndo();n.role=b.dataset.role;rebuild();});
   const col=document.getElementById('col');
   if(col)col.onchange=()=>{pushUndo();n.color=col.value;rebuild();};
+  const opa=document.getElementById('opa'),opaV=document.getElementById('opaV');
+  if(opa){
+    // 改透明度只換材質，不必重算 CSG，所以拖的過程畫面就即時跟著變
+    const paint=()=>{
+      const m=meshes.find(x=>x.userData.id===n.id);
+      if(!m||n.role==='hole')return;         // 孔洞有自己的半透明畫法，不蓋掉
+      if(!Array.isArray(m.material))return;  // 現在是實心材質，得整個換過（走 rebuild）
+      const o=clampOpa(n.opa);
+      m.material[0].opacity=o*.55;m.material[1].opacity=o;
+    };
+    let started=false;                       // 真的拖動才記 undo，點一下不算
+    opa.oninput=()=>{
+      if(!started){started=true;pushUndo();}
+      n.opa=lastOpa=1-opa.value/100;opaV.textContent=opa.value+'%';paint();
+    };
+    opa.onchange=()=>{ started=false; };     // 放開滑鼠算這一段結束
+    host.querySelectorAll('[data-opa]').forEach(b=>b.onclick=()=>{
+      const on=b.dataset.opa==='1';
+      if(on===(n.opa!=null))return;          // 已經是這個狀態就什麼都不做
+      pushUndo();
+      // 關掉時把數值留在滑桿上，再打開就回到剛才那個透明度
+      if(on)n.opa=lastOpa=1-opa.value/100; else delete n.opa;
+      rebuild();            // 實心↔半透明是兩種材質，要重掛（幾何體走快取，很快）
+    });
+  }
   document.getElementById('drop').onclick=()=>{
     pushUndo();
     const m=meshes.find(x=>x.userData.id===n.id);
