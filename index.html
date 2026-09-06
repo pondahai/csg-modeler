@@ -162,6 +162,21 @@
   .seg button.on{background:var(--solid);border-color:var(--solid);color:#06121b;font-weight:600;}
   .seg button.on.hole{background:var(--hole);border-color:var(--hole);color:#1b060c;}
   .grp{margin:14px 0 6px;padding-top:12px;border-top:1px solid var(--line);}
+  /* 尺寸／位置／旋轉排成九宮格：本來是三段標題＋九行，佔掉面板一大截，
+     顏色和透明度都要捲才看得到。橫的是 X/Y/Z，直的是三組，共四行。
+     欄位因此只有 55px 左右，所以要藏掉數字框右邊那對上下小箭頭
+     （純外觀，鍵盤上下鍵照樣加減）並縮小字級，不然數字會被切掉。 */
+  .g9{display:grid;grid-template-columns:auto repeat(3,1fr);gap:3px;align-items:center;}
+  .g9 .hd{color:var(--dim);font-size:10px;text-align:center;}
+  /* 單位另起一行墊在組名下面：橫著寫「尺寸 mm」的話光這一欄就吃掉 43px，
+     輸入框只剩 42px；疊成兩行之後這一欄剩 24px，三個格子各多拿到 6px。 */
+  .g9 .rl{color:var(--dim);font-size:11px;line-height:1.15;padding-right:2px;
+    text-align:right;}
+  .g9 .rl small{display:block;font-size:9px;opacity:.7;}
+  .g9 input[type=number]{font-size:11px;padding:4px 2px;text-align:center;
+    -moz-appearance:textfield;}
+  .g9 input[type=number]::-webkit-outer-spin-button,
+  .g9 input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
   .empty{color:var(--dim);padding:6px;}
   /* 操作說明預設收起來，只留左下角一顆問號。字很多，擋掉的畫面比它教的還多，
      而且看過一次就不用再看了。 */
@@ -2396,8 +2411,9 @@ function drawInspector(){
     return;
   }
   const n=findNode(selected[0]);
-  const num=(lbl,val,path,i)=>`<div class="row"><label>${lbl}</label>
-    <input type="number" step="1" value="${val}" data-p="${path}" data-i="${i}"></div>`;
+  // 九宮格裡的一格：沒有自己的 label，欄名靠最上面那排、組名靠左邊那欄
+  const cell=(val,path,i)=>
+    `<input type="number" step="1" value="${val}" data-p="${path}" data-i="${i}">`;
   host.innerHTML=`
     <div class="row" style="margin-bottom:10px">
       <input type="text" id="nm" placeholder="元件名稱（選填）" value="${n.name||''}"
@@ -2408,12 +2424,15 @@ function drawInspector(){
       <button data-role="solid" class="${n.role==='solid'?'on':''}">實體</button>
       <button data-role="hole" class="${n.role==='hole'?'on hole':''}">孔洞</button>
     </div>
-    <h2>尺寸 mm</h2>
-    ${num('X',n.size[0],'size',0)}${num('Y',n.size[1],'size',1)}${num('Z',n.size[2],'size',2)}
-    <div class="grp"><h2>位置 mm</h2></div>
-    ${num('X',n.pos[0],'pos',0)}${num('Y',n.pos[1],'pos',1)}${num('Z',n.pos[2],'pos',2)}
-    <div class="grp"><h2>旋轉 度</h2></div>
-    ${num('X',n.rot[0],'rot',0)}${num('Y',n.rot[1],'rot',1)}${num('Z',n.rot[2],'rot',2)}
+    <div class="g9">
+      <span></span><span class="hd">X</span><span class="hd">Y</span><span class="hd">Z</span>
+      <span class="rl">尺寸<small>mm</small></span>
+      ${cell(n.size[0],'size',0)}${cell(n.size[1],'size',1)}${cell(n.size[2],'size',2)}
+      <span class="rl">位置<small>mm</small></span>
+      ${cell(n.pos[0],'pos',0)}${cell(n.pos[1],'pos',1)}${cell(n.pos[2],'pos',2)}
+      <span class="rl">旋轉<small>度</small></span>
+      ${cell(n.rot[0],'rot',0)}${cell(n.rot[1],'rot',1)}${cell(n.rot[2],'rot',2)}
+    </div>
     ${n.shape==='box'?`<div class="grp"><h2>圓角 mm（0 就是直角）</h2></div>
       <div class="row"><label>R</label>
       <input type="number" step="0.5" min="0" id="rad" value="${n.r||0}"></div>`:''}
