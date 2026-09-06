@@ -1217,33 +1217,23 @@ for(const sx of [-1,0,1])for(const sz of [-1,0,1]){
    現在三圈拆開站到物件外面（見 placeRings）。
    曾經改成只畫四分之一段弧，畫面確實更乾淨，但看起來不像「可以繞著轉」的東西，
    專案擁有者看過之後決定改回完整的圈。位置照樣是拆開的，該解決的問題已經解決。
-   按下去時那一圈會搬回物件中心（expandRing），說明「轉的是這個中心」。 */
-const geoRing=new THREE.TorusGeometry(1,.028,8,72);    // 平常：完整的一圈，粗一點好點
-const geoFull=new THREE.TorusGeometry(1,.022,8,72);    // 拖曳中：搬到中心的那一圈
+   位置和大小都由 placeRings 決定，拖曳中一律不動。 */
+const geoRing=new THREE.TorusGeometry(1,.028,8,72);    // 細的不好點，粗一點
 const rings=[];
 [['x',0xd98f99],['y',0x9cc48a],['z',0x8fb4d6]].forEach(([ax,col])=>{
   const m=new THREE.Mesh(geoRing,
     new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.75}));
   m.userData={axis:ax};m.visible=false;helpLayer.add(m);rings.push(m);
 });
-/* 按住某一段弧時：那一圈搬回物件中心、展開成整圈（順便說明「轉的是這個中心」），
-   另外兩段先收起來，免得跟正在轉的那一圈混在一起。 */
-function expandRing(ax,c){
-  for(const r of rings){
-    if(r.userData.axis!==ax){r.visible=false;continue;}
-    r.geometry=geoFull;r.position.copy(c);r.visible=true;
-  }
+/* 拖著某一圈轉的時候，另外兩圈先收起來，免得跟正在轉的那一圈混在一起。
+   那一圈本身留在原地不要動——曾經做成搬回物件中心（想說順便講明「轉的是這個
+   中心」），但按下去的瞬間環就跳走，手還按在原處環卻不在那裡了，
+   專案擁有者看過之後否決。 */
+function soloRing(ax){
+  for(const r of rings)r.visible=(r.userData.axis===ax);
 }
-
-/* 放手之後收回三段弧。用 placeHandles 當時記下的位置還原，不重算包圍盒——
-   拖曳中的預覽變換還掛在 mesh 上，這時去量包圍盒會量到舊的，把手會跳一下。 */
-function collapseRings(){
-  if(!selected.length){for(const r of rings)r.visible=false;return;}
-  for(const r of rings){
-    const rest=r.userData.rest;if(!rest)continue;
-    r.geometry=geoRing;r.position.copy(rest.p);r.quaternion.copy(rest.q);
-    r.scale.setScalar(rest.R);r.visible=true;
-  }
+function showRings(){
+  for(const r of rings)r.visible=selected.length>0;
 }
 
 const topHandle=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),matTop);
@@ -1671,7 +1661,6 @@ function placeRings(b,c,s){
     if(ax==='x')r.rotation.y=Math.PI/2;
     if(ax==='y')r.rotation.x=Math.PI/2;
     r.updateMatrixWorld(true);
-    r.userData.rest={p:p.clone(),q:r.quaternion.clone(),R};
     r.visible=true;
   }
 }
@@ -1842,7 +1831,7 @@ renderer.domElement.addEventListener('pointerdown',e=>{
       const p=ray.ray.intersectPlane(pl,new THREE.Vector3());
       if(!p)return;
       mode='rotate';
-      expandRing(ax,c);                   // 弧展開成整圈，讓人知道可以一直轉下去
+      soloRing(ax);                       // 另外兩圈先收起來，這一圈留在原地
       start={axis:ax,c,nrm,plane:pl,a0:angleOn(ax,p,c)};
       return;
     }
@@ -2166,7 +2155,7 @@ addEventListener('pointerup',e=>{
   }
   if(mode==='move'||mode==='moveY'||mode==='scaleH'||mode==='rotate'){
     hideDim();
-    if(mode==='rotate')collapseRings();   // 整圈收回三段弧
+    if(mode==='rotate')showRings();       // 另外兩圈回來
     /* 這裡不要清掉拖曳時的預覽位移。重算現在是分段跑的，中間隔著好幾十毫秒，
        先清掉的話畫面會先把物件彈回原位、等新幾何體算好才跳過去——看起來就是
        「放開時閃一下跳回去」。留著預覽，等 rebuildG 換上新的 mesh 那一瞬間
