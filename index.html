@@ -1264,7 +1264,9 @@ function kindKey(n){
   // 不整包 stringify（幾十萬個數字），改用長度＋幾個取樣點。
   // 光靠 id 不夠：換一個檔案可能出現相同編號卻是不同模型。
   const t=n.tri,L=t.length;
-  return `m${L}.${t[0]},${t[L>>1]},${t[L-1]}`;
+  // 文字重新編輯過之後三角形數量可能剛好一樣（「AB」改成「BA」），
+  // 光看長度和取樣點會認錯、畫面不更新，所以帶上「改過第幾次」。
+  return `m${L}.${t[0]},${t[L>>1]},${t[L-1]}`+(n.gen?'#'+n.gen:'');
 }
 function subKey(n){
   return kindKey(n)+`|${n.pos}|${n.rot}|${n.size}|${n.post||''}|${n.role}`+
@@ -2403,6 +2405,8 @@ function drawInspector(){
     ${n.shape==='prism'?`<div class="grp"><h2>幾邊形</h2></div>
       <div class="row"><label>N</label>
       <input type="number" step="1" min="3" max="24" id="sides" value="${prismSides(n)}"></div>`:''}
+    ${n.txt?`<div class="grp"><h2>文字</h2></div>
+      <button id="edTxt" style="width:100%">編輯文字…</button>`:''}
     <div class="grp"><h2>顏色</h2></div>
     <input type="color" value="${n.color||'#5b8dd6'}" id="col">
     ${n.role==='hole'?'':`
@@ -2448,6 +2452,8 @@ function drawInspector(){
   if(sides)sides.onchange=()=>{pushUndo();
     n.sides=Math.max(3,Math.min(24,Math.round(parseFloat(sides.value)||6)));
     rebuild();drawTree();};
+  const edt=document.getElementById('edTxt');
+  if(edt)edt.onclick=()=>editText(n);
   const nm=document.getElementById('nm');
   if(nm)nm.onchange=()=>{pushUndo();
     const v=nm.value.trim();
@@ -3662,7 +3668,14 @@ function textContours(opt){
   return contours;
 }
 
-let txtQual='mid', txtOpt={text:'文字',size:10,thick:2,bold:false};
+let txtQual='mid';
+let txtOpt={text:'文字',font:'Microsoft JhengHei',size:10,thick:2,bold:false,qual:'mid'};
+function setTxtQual(q){
+  txtQual=q;
+  document.querySelectorAll('#txtQual button')
+    .forEach(x=>x.classList.toggle('on',x.dataset.q===q));
+}
+const txtName=t=>t.replace(/\s+/g,' ').trim().slice(0,12);
 function txtFontNow(){
   const sel=document.getElementById('txtFont');
   return sel.value==='__custom'
@@ -3690,19 +3703,28 @@ function txtDraw(){
     cv.height/2+(i-(lines.length-1)/2)*px*1.25));
 }
 document.querySelectorAll('#txtQual button').forEach(b=>{
-  b.onclick=()=>{txtQual=b.dataset.q;
-    document.querySelectorAll('#txtQual button').forEach(x=>x.classList.toggle('on',x===b));};
+  b.onclick=()=>setTxtQual(b.dataset.q);
 });
-function askText(){
+/* init 是「這個文字節點當初用的設定」（重新編輯時傳進來）；
+   沒有就沿用上一次用過的，跟原本一樣。 */
+function askText(init){
   return new Promise(res=>{
     const bg=document.getElementById('txtDlgBg');
     const inp=document.getElementById('txtIn'), sel=document.getElementById('txtFont');
     const custom=document.getElementById('txtFontName');
     const bold=document.getElementById('txtBold');
-    inp.value=txtOpt.text;
-    document.getElementById('txtSize').value=txtOpt.size;
-    document.getElementById('txtThk').value=txtOpt.thick;
-    bold.checked=txtOpt.bold;
+    const o=init||txtOpt;
+    inp.value=o.text;
+    document.getElementById('txtSize').value=o.size;
+    document.getElementById('txtThk').value=o.thick;
+    bold.checked=!!o.bold;
+    const f=o.font||'';
+    if(f&&[...sel.options].some(x=>x.value===f)){sel.value=f;custom.value='';}
+    else if(f){sel.value='__custom';custom.value=f;}
+    custom.style.display=sel.value==='__custom'?'block':'none';
+    setTxtQual(o.qual||'mid');
+    document.getElementById('txtOk').textContent=init?'改好了':'放進來';
+    document.querySelector('#txtDlg h3').textContent=init?'編輯文字':'加入文字';
     bg.classList.add('on');
     requestAnimationFrame(()=>{txtDraw();inp.focus();inp.select();});
     const redraw=()=>{custom.style.display=sel.value==='__custom'?'block':'none';txtDraw();};
@@ -3722,7 +3744,7 @@ function askText(){
                thick:(isFinite(t)&&t>0)?t:2,
                bold:bold.checked, qual:txtQual};
       if(!v.text.trim()){inp.focus();return;}
-      txtOpt={text:v.text,size:v.size,thick:v.thick,bold:v.bold};
+      txtOpt={...v};
       done(v,true);
     };
     const key=e=>{
@@ -3738,9 +3760,8 @@ function askText(){
     addEventListener('keydown',key);
   });
 }
-async function addText(){
-  const opt=await askText();
-  if(!opt)return;
+/* 把設定變成三角形。加入新文字和重新編輯走的是同一段。 */
+async function buildTextTri(opt){
   const bg=document.getElementById('txtDlgBg');
   bg.classList.add('wait');
   await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
@@ -3769,16 +3790,47 @@ async function addText(){
       '之後每次移動、縮放放開滑鼠都會頓幾秒。\n'+
       '調成「粗」可以少一點面。要繼續嗎？'))return;
 
-    const {tri,size,height}=normalizeTris(tri0);
-    pushUndo();
-    const n={id:uid++,kind:'mesh',role:'solid',
-             pos:[0,Math.round(height/2*1e3)/1e3,0],rot:[0,0,0],size,
-             color:SHAPE_COLOR.mesh,
-             name:opt.text.replace(/\s+/g,' ').trim().slice(0,12),
-             tri};
-    roots.push(n);selected=[n.id];rebuild();
+    return normalizeTris(tri0);
   }catch(err){alert('這幾個字做不出來：'+err.message);}
   finally{bg.classList.remove('on','wait');}
+  return null;
+}
+async function addText(){
+  const opt=await askText();
+  if(!opt)return;
+  const r=await buildTextTri(opt);
+  if(!r)return;
+  pushUndo();
+  const n={id:uid++,kind:'mesh',role:'solid',
+           pos:[0,Math.round(r.height/2*1e3)/1e3,0],rot:[0,0,0],size:r.size,
+           color:SHAPE_COLOR.mesh,
+           name:txtName(opt.text),
+           txt:{...opt},          // 記住當初的設定，之後才改得動
+           tri:r.tri};
+  roots.push(n);selected=[n.id];rebuild();
+}
+/* 重新編輯：只換掉三角形，pos/rot/post 一個都不碰，所以搬到哪、轉幾度、
+   翻過面全部留著。size 也只在「視窗裡真的改了那一格」時才動——
+   沒動過就沿用你現在拉成的尺寸。字變長是往兩邊長（中心不動）。 */
+async function editText(n){
+  const opt=await askText(n.txt||txtOpt);
+  if(!opt)return;
+  const r=await buildTextTri(opt);
+  if(!r)return;
+  pushUndo();
+  const old=n.txt||{}, cur=n.size, sg=v=>v<0?-1:1;   // 負號是鏡像，要留著
+  const same=(a,b)=>a!=null&&Math.abs(a-b)<1e-9;
+  const h  = same(old.size, opt.size)  ? Math.abs(cur[2]) : opt.size;   // 字高
+  const th = same(old.thick,opt.thick) ? Math.abs(cur[1]) : opt.thick;  // 厚度
+  const f  = h/(r.size[2]||1);
+  const rd = v=>Math.round(v*1e3)/1e3;
+  n.tri=r.tri;
+  n.size=[rd(r.size[0]*f)*sg(cur[0]), rd(th)*sg(cur[1]), rd(h)*sg(cur[2])];
+  n.txt={...opt};
+  n.gen=(n.gen||0)+1;
+  if(n.lost)delete n.lost;              // 暫存塞不下被換成佔位方塊的，這下補回來了
+  if(!n.name||n.name===txtName(old.text||''))n.name=txtName(opt.text);
+  rebuild();drawTree();
 }
 
 /* 元件選單那一格的縮圖：拿自己的管線做一個立體的「A」。
