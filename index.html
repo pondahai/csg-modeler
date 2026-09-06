@@ -1132,12 +1132,27 @@ const dir=new THREE.DirectionalLight(0xffffff,.5);dir.position.set(60,110,80);sc
 /* 格線的一格 = 目前的吸附格距（SNAP）。格距很小的時候畫滿 400mm 會變成
    幾千條線，糊成一片又慢，所以線太多就退回 10mm 的格線，只有吸附變細——
    看得懂比較重要。 */
+/* 地板（格線＋玻璃）永遠在最先畫，模型疊在它上面。
+
+   這件事本來是靠「加進場景的順序」自然成立的，但半透明的物件改成自己算
+   距離、寫進 renderOrder 之後就破功了：模型拿到的是負幾百，格線和玻璃還
+   停在 0，排序時反而排到最後——**格線就被畫在半透明的模型上面**，看起來
+   像格線穿透模型浮在前面。使用者回報「透明的時候格線特別清楚」就是這個。
+   所以地板要明確寫一個比誰都小的號碼。
+
+   玻璃排在格線後面一格（也就是蓋在格線上），這是刻意的：格線隔著那層膜
+   看就淡了，不會跟模型搶。位置也跟著抬到格線上方，免得兩張平面互相閃爍。
+   代價是**半透明物件沉到平面下方的部分不再透出藍色**（它畫在玻璃之後），
+   不透明的物件不受影響——那條路是先畫完所有不透明的才輪到玻璃。 */
+const FLOOR_ORDER=-1e6;
 let grid=null;
 function makeGrid(cell){
   const c=(400/cell>200)?10:cell;
   if(grid){scene.remove(grid);grid.geometry.dispose();grid.material.dispose();}
   grid=new THREE.GridHelper(400,Math.round(400/c),0xa9a08a,0xd6cdb6);
-  grid.material.transparent=true;grid.material.opacity=.75;scene.add(grid);
+  grid.material.transparent=true;grid.material.opacity=.75;
+  grid.renderOrder=FLOOR_ORDER;                    // 地板永遠先畫（見下）
+  scene.add(grid);
 }
 makeGrid(1);
 
@@ -1146,7 +1161,8 @@ makeGrid(1);
    - 不寫深度（depthWrite=false）：玻璃只上色、不擋住後面的東西的深度，
      所以沉在平面下方的部分會透出藍色，浮在上方的部分維持原色——一眼就
      看得出剖面切在哪。
-   - 壓在格線下面一點點（-0.02），不然會跟格線互相閃爍（z-fighting）。
+   - 蓋在格線上面一點點（+0.02）：格線隔著這層膜看就淡了，不會跟模型搶。
+     差那 0.02 是為了不跟格線互相閃爍（z-fighting）。
    - 用 MeshBasicMaterial（不吃光）：吃光的話會隨角度忽明忽暗，看起來像
      另一個實體，反而不像玻璃。
    - 沒有加進 meshes／handles，所以點不到它，不會干擾選取。 */
@@ -1154,7 +1170,9 @@ const glass=new THREE.Mesh(
   new THREE.PlaneGeometry(400,400),
   new THREE.MeshBasicMaterial({color:0x2f9fd0,transparent:true,opacity:.22,
                                side:THREE.DoubleSide,depthWrite:false}));
-glass.rotation.x=-Math.PI/2;glass.position.y=-0.02;scene.add(glass);
+glass.rotation.x=-Math.PI/2;glass.position.y=0.02;
+glass.renderOrder=FLOOR_ORDER+1;                   // 蓋在格線上，把格線壓淡
+scene.add(glass);
 
 const objLayer=new THREE.Group();scene.add(objLayer);
 const helpLayer=new THREE.Group();scene.add(helpLayer);
