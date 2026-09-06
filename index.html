@@ -1643,8 +1643,8 @@ function placeHandles(b){
 }
 /* 三圈拆開站在物件外面，但轉的中心仍然是物件自己的中心（東西是原地轉的）。
    平躺那一圈放「底部」：正上方已經有藍色的高度把手，放上面會疊在一起，
-   放底下還剛好像個轉盤圍著底座。立起來的兩圈貼在「面對鏡頭」的那一側，
-   不然視角一轉就躲到模型背後點不到。
+   放底下還剛好像個轉盤圍著底座。立起來的兩圈推到「離鏡頭遠」的那一側，
+   免得擋在物件前面；圈圈比那一面的外接圓大一圈，所以還是繞得出來、點得到。
    位置跟視角有關，所以轉視角時要重算（updateCam），但那時不要重量包圍盒
    ——量一次要走過所有三角形，大模型每一格都量會頓，所以留著 ringBox。 */
 let ringBox=null;
@@ -1659,12 +1659,12 @@ function placeRings(b,c,s){
     let R,p;
     if(ax==='y'){                       // 水平轉：底部一圈，半徑要繞得過角落的把手
       R=rad(sz.x,sz.z);p=new THREE.Vector3(c.x,b.min.y,c.z);
-    }else if(ax==='x'){                 // 立著：左邊或右邊，挑鏡頭這一側
+    }else if(ax==='x'){                 // 立著：左邊或右邊，挑「離鏡頭遠」的那一側
       R=rad(sz.y,sz.z);
-      p=new THREE.Vector3(camera.position.x>=c.x?b.max.x+off:b.min.x-off,c.y,c.z);
-    }else{                              // 立著：前面或後面，挑鏡頭這一側
+      p=new THREE.Vector3(camera.position.x>=c.x?b.min.x-off:b.max.x+off,c.y,c.z);
+    }else{                              // 立著：前面或後面，同樣挑遠的那一側
       R=rad(sz.x,sz.y);
-      p=new THREE.Vector3(c.x,c.y,camera.position.z>=c.z?b.max.z+off:b.min.z-off);
+      p=new THREE.Vector3(c.x,c.y,camera.position.z>=c.z?b.min.z-off:b.max.z+off);
     }
     r.geometry=geoRing;r.position.copy(p);r.scale.setScalar(R);
     r.rotation.set(0,0,0);
