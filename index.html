@@ -1417,9 +1417,9 @@ const XRAY_FRONT=sh=>{
                                        normalize( vViewPosition ) ) ), 2.0 );
      float lum  = dot( gl_FragColor.rgb, vec3( 0.299, 0.587, 0.114 ) );
      float hi   = smoothstep( 0.60, 1.0, lum );          // 反光的那一塊
-     gl_FragColor.a = clamp( mix( gl_FragColor.a * 0.85,
-                                  gl_FragColor.a * 2.1 + 0.30, fres )
-                             + hi * 0.30, 0.0, 1.0 );`);
+     float a    = gl_FragColor.a;
+     gl_FragColor.a = clamp( mix( a * 0.85, a + ( 1.0 - a ) * 0.38, fres )
+                             + hi * 0.25, 0.0, 0.80 );`);
 };
 /* 背面那一層：它的任務只是「這是後面的牆」，所以維持暗、淡、不上高光，
    免得前後兩層一樣搶眼，又變回分不出遠近的一團。 */
@@ -1428,8 +1428,8 @@ const XRAY_BACK=sh=>{
     `#include <dithering_fragment>
      float fres = pow( 1.0 - abs( dot( normalize( vNormal ),
                                        normalize( vViewPosition ) ) ), 2.0 );
-     gl_FragColor.a = clamp( mix( gl_FragColor.a * 0.50,
-                                  gl_FragColor.a * 1.6 + 0.15, fres ), 0.0, 1.0 );`);
+     float a    = gl_FragColor.a;
+     gl_FragColor.a = clamp( mix( a * 0.50, a + ( 1.0 - a ) * 0.22, fres ), 0.0, 0.55 );`);
 };
 function xrayMat(col,op,side,dim,front){
   const m=new THREE.MeshPhongMaterial({
@@ -1456,7 +1456,7 @@ function addMesh(n,geo){
   }else{
     const cnt=geo.getAttribute('position').count;
     geo.clearGroups();geo.addGroup(0,cnt,0);geo.addGroup(0,cnt,1);
-    mat=[xrayMat(base,op*.55,THREE.BackSide,.55,false), // 先畫：背後那一面
+    mat=[xrayMat(base,op*.35,THREE.BackSide,.55,false), // 先畫：背後那一面
          xrayMat(base,op,THREE.FrontSide,1,true)];      // 後畫：朝著你的那一面
   }
   const mesh=new THREE.Mesh(geo,mat);
