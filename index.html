@@ -1212,15 +1212,39 @@ for(const sx of [-1,0,1])for(const sz of [-1,0,1]){
   m.userData={sx,sz,sy:0,axes:corner?'xz':(sx?'x':'z')};
   m.visible=false;helpLayer.add(m);handles.push(m);
 }
-// 旋轉圓弧：三個軸各一圈
+/* 旋轉把手：三個軸各一段弧。
+   以前是三個完整的圈圈同心疊在物件中心，互相交叉又穿過模型——分不清誰是誰，
+   想點某一圈常常點到另一圈。現在拆開站到物件外面（見 placeHandles）。
+   弧只是「握把」不是「軌道」：按下去之後滑鼠繞到哪物件就轉到哪，跟弧畫多長
+   完全無關，照樣轉得到 180 度或轉好幾圈。但畫得短會讓人以為只能轉那麼多，
+   所以按下去的瞬間展開成完整的一圈（expandRing），放手再收回去。 */
+const ARC=Math.PI/2;                                   // 平常露出四分之一圈
+const geoArc=new THREE.TorusGeometry(1,.028,8,20,ARC); // 弧細一點會不好點，粗一些
+const geoFull=new THREE.TorusGeometry(1,.022,8,72);
 const rings=[];
 [['x',0xd98f99],['y',0x9cc48a],['z',0x8fb4d6]].forEach(([ax,col])=>{
-  const m=new THREE.Mesh(new THREE.TorusGeometry(1,.022,8,72),
-    new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.55}));
-  if(ax==='x')m.rotation.y=Math.PI/2;
-  if(ax==='y')m.rotation.x=Math.PI/2;
+  const m=new THREE.Mesh(geoArc,
+    new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.75}));
   m.userData={axis:ax};m.visible=false;helpLayer.add(m);rings.push(m);
 });
+/* 按住某一段弧時：那一圈搬回物件中心、展開成整圈（順便說明「轉的是這個中心」），
+   另外兩段先收起來，免得跟正在轉的那一圈混在一起。 */
+function expandRing(ax,c){
+  for(const r of rings){
+    if(r.userData.axis!==ax){r.visible=false;continue;}
+    r.geometry=geoFull;r.position.copy(c);r.visible=true;
+  }
+}
+/* 放手之後收回三段弧。用 placeHandles 當時記下的位置還原，不重算包圍盒——
+   拖曳中的預覽變換還掛在 mesh 上，這時去量包圍盒會量到舊的，把手會跳一下。 */
+function collapseRings(){
+  if(!selected.length){for(const r of rings)r.visible=false;return;}
+  for(const r of rings){
+    const rest=r.userData.rest;if(!rest)continue;
+    r.geometry=geoArc;r.position.copy(rest.p);r.quaternion.copy(rest.q);
+    r.scale.setScalar(rest.R);r.visible=true;
+  }
+}
 
 const topHandle=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),matTop);
 topHandle.userData={sx:0,sz:0,sy:1,axes:'y'};
@@ -1235,6 +1259,10 @@ function updateCam(){
     target.y+sph.r*Math.cos(sph.phi),
     target.z+sph.r*Math.sin(sph.phi)*Math.cos(sph.theta));
   camera.lookAt(target);
+  /* 三段旋轉弧要站在「面對鏡頭」的那一側，所以轉視角時得重新擺一次。
+     正在轉物件（弧已經展開成整圈）時不要動它。 */
+  if(ringBox&&mode!=='rotate')
+    placeRings(ringBox,ringBox.getCenter(new THREE.Vector3()),Math.max(1.6,sph.r*0.019));
 }
 function resize(){
   const w=view.clientWidth,h=view.clientHeight;
@@ -1598,6 +1626,9 @@ function selBox(){
     b.union(new THREE.Box3().copy(m.geometry.boundingBox));any=true;}
   return any?b:null;
 }
+/* 世界座標 → 畫面座標（只要相對距離，所以用 NDC 就好，x 要乘上長寬比） */
+const _ndc=new THREE.Vector3();
+function ndc(p){_ndc.copy(p).project(camera);return{x:_ndc.x*camera.aspect,y:_ndc.y};}
 function placeHandles(b){
   const c=b.getCenter(new THREE.Vector3());
   const s=Math.max(1.6,sph.r*0.019);
@@ -1611,8 +1642,65 @@ function placeHandles(b){
       d.sy? c.z : c.z+d.sz*(b.max.z-b.min.z)/2);
     h.scale.setScalar(s);h.visible=true;
   }
-  const R=Math.max(b.getSize(new THREE.Vector3()).length()*.62,s*4);
-  for(const r of rings){r.position.copy(c);r.scale.setScalar(R);r.visible=true;}
+  ringBox=b.clone();placeRings(b,c,s);
+}
+/* 三段弧站在物件外面，但圓心仍然是物件中心——轉的時候東西是原地轉的。
+   平躺那一段放「底部」：正上方已經有藍色的高度把手，放上面會疊在一起，
+   放底下還剛好像個轉盤圍著底座。立起來的兩段貼在「面對鏡頭」的那一側，
+   不然視角一轉就躲到模型背後點不到。
+   位置跟視角有關，所以轉視角時要重算（updateCam），但那時不要重量包圍盒
+   ——量一次要走過所有三角形，大模型每一格都量會頓，所以留著 ringBox。 */
+let ringBox=null;
+function placeRings(b,c,s){
+  const sz=b.getSize(new THREE.Vector3());
+  /* 半徑一律比那一面的外接圓再大一點（gap），弧才會落在輪廓外面而不是趴在
+     表面上；貼著面的那個方向只推開一點點（off），推太遠會像跟物件脫節。 */
+  const gap=s*2.2,off=s*1.2;
+  const rad=(u,v)=>Math.max(Math.hypot(u,v)/2,s*3)+gap;
+  for(const r of rings){
+    const ax=r.userData.axis;
+    let R,p;
+    if(ax==='y'){                       // 水平轉：底部一圈，半徑要繞得過角落的把手
+      R=rad(sz.x,sz.z);p=new THREE.Vector3(c.x,b.min.y,c.z);
+    }else if(ax==='x'){                 // 立著：左邊或右邊，挑鏡頭這一側
+      R=rad(sz.y,sz.z);
+      p=new THREE.Vector3(camera.position.x>=c.x?b.max.x+off:b.min.x-off,c.y,c.z);
+    }else{                              // 立著：前面或後面，挑鏡頭這一側
+      R=rad(sz.x,sz.y);
+      p=new THREE.Vector3(c.x,c.y,camera.position.z>=c.z?b.max.z+off:b.min.z-off);
+    }
+    r.geometry=geoArc;r.position.copy(p);r.scale.setScalar(R);
+    r.rotation.set(0,0,0);
+    if(ax==='x')r.rotation.y=Math.PI/2;
+    if(ax==='y')r.rotation.x=Math.PI/2;
+    r.updateMatrixWorld(true);
+    const u=new THREE.Vector3(1,0,0).applyQuaternion(r.quaternion);
+    const v=new THREE.Vector3(0,1,0).applyQuaternion(r.quaternion);
+    let best;
+    if(ax==='y'){
+      // 底部那一圈整個在物件下面，不會擋到，就擺在正對著人的那一段
+      const d=camera.position.clone().sub(p);
+      best=Math.atan2(d.dot(v),d.dot(u));
+    }else{
+      /* 立起來的兩段擺在「畫面上離物件中心最遠」的那一段，弧才會露在輪廓外面。
+         不能只在世界座標上算「這一段比物件高」：圈圈是往鏡頭那一側推開的，
+         離鏡頭近，透視會把它畫得又大又低，世界座標上算得再對，畫面上還是
+         壓在模型身上——實際試出來的。只找上半圈，下半圈會跟底部那一段撞在一起。 */
+      const cs=ndc(c);let bd=-1;
+      for(let k=0;k<24;k++){
+        const a=k*Math.PI/12;
+        const w=u.clone().multiplyScalar(Math.cos(a)).addScaledVector(v,Math.sin(a));
+        if(w.y<0.2)continue;
+        const q=ndc(p.clone().addScaledVector(w,R));
+        const d2=(q.x-cs.x)**2+(q.y-cs.y)**2;
+        if(d2>bd){bd=d2;best=a;}
+      }
+      if(bd<0)best=Math.PI/2;           // 正上方（正俯視時上半圈全部退化成一條線）
+    }
+    r.rotateZ(best-ARC/2);
+    r.userData.rest={p:p.clone(),q:r.quaternion.clone(),R};
+    r.visible=true;
+  }
 }
 function updateHandles(){
   const b=selBox();
@@ -1620,6 +1708,7 @@ function updateHandles(){
     boxHelper.visible=yHandle.visible=false;
     for(const h of handles)h.visible=false;
     for(const r of rings)r.visible=false;
+    ringBox=null;                       // 不然轉視角時 updateCam 會把弧又擺回來
     hideDim();return;
   }
   boxHelper.box.copy(b);boxHelper.visible=true;
@@ -1780,6 +1869,7 @@ renderer.domElement.addEventListener('pointerdown',e=>{
       const p=ray.ray.intersectPlane(pl,new THREE.Vector3());
       if(!p)return;
       mode='rotate';
+      expandRing(ax,c);                   // 弧展開成整圈，讓人知道可以一直轉下去
       start={axis:ax,c,nrm,plane:pl,a0:angleOn(ax,p,c)};
       return;
     }
@@ -2103,6 +2193,7 @@ addEventListener('pointerup',e=>{
   }
   if(mode==='move'||mode==='moveY'||mode==='scaleH'||mode==='rotate'){
     hideDim();
+    if(mode==='rotate')collapseRings();   // 整圈收回三段弧
     /* 這裡不要清掉拖曳時的預覽位移。重算現在是分段跑的，中間隔著好幾十毫秒，
        先清掉的話畫面會先把物件彈回原位、等新幾何體算好才跳過去——看起來就是
        「放開時閃一下跳回去」。留著預覽，等 rebuildG 換上新的 mesh 那一瞬間
