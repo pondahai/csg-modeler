@@ -3047,6 +3047,7 @@ function migrate(list){
     if(n.shape==='rbox'){n.shape='box';if(!(n.r>0))n.r=2;n.color=SHAPE_COLOR.box;}
     // 六角柱曾經是獨立的形狀，後來併進「正 N 邊形柱」的 N=6
     if(n.shape==='hex'){n.shape='prism';n.sides=6;n.color=SHAPE_COLOR.prism;}
+    delete n.hide;   // 藏起來只在這一次開著的期間有效，載入一律恢復顯示
     if(n.children)migrate(n.children);
   }
   return list;
