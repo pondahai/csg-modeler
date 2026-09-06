@@ -1383,21 +1383,41 @@ let lastOpa=.5;   // 關掉透明之後再打開，回到上一次拉到的濃�
    你的表面」）。再加上邊緣越斜越濃（菲涅耳），輪廓就回來了——球和圓柱這種
    沒有稜線的形狀特別靠這個，不然透明之後根本看不出是顆球。
    兩層是同一個幾何體切成兩個 group，只是各用一個材質，不多一份三角形。 */
-const XRAY_PATCH=sh=>{
+/* 正面那一層：面對著你的地方原本被壓到很淡（0.55 倍），看起來像沒有東西，
+   使用者回報「表面像全透明」。所以正面的底色拉到 0.85 倍——**要看得出這裡
+   有一片有顏色的殼**，只是看得穿。再加一道假的高光：亮的地方（Phong 的
+   specular 打到的那一塊）連透明度一起加上去，玻璃之所以看起來是玻璃就靠
+   那一抹反光，只調濃淡是做不出來的。 */
+const XRAY_FRONT=sh=>{
   sh.fragmentShader=sh.fragmentShader.replace('#include <dithering_fragment>',
     `#include <dithering_fragment>
      float fres = pow( 1.0 - abs( dot( normalize( vNormal ),
                                        normalize( vViewPosition ) ) ), 2.0 );
-     gl_FragColor.a = clamp( mix( gl_FragColor.a * 0.55,
-                                  gl_FragColor.a * 2.1 + 0.30, fres ), 0.0, 1.0 );`);
+     float lum  = dot( gl_FragColor.rgb, vec3( 0.299, 0.587, 0.114 ) );
+     float hi   = smoothstep( 0.60, 1.0, lum );          // 反光的那一塊
+     gl_FragColor.a = clamp( mix( gl_FragColor.a * 0.85,
+                                  gl_FragColor.a * 2.1 + 0.30, fres )
+                             + hi * 0.30, 0.0, 1.0 );`);
 };
-function xrayMat(col,op,side,dim){
+/* 背面那一層：它的任務只是「這是後面的牆」，所以維持暗、淡、不上高光，
+   免得前後兩層一樣搶眼，又變回分不出遠近的一團。 */
+const XRAY_BACK=sh=>{
+  sh.fragmentShader=sh.fragmentShader.replace('#include <dithering_fragment>',
+    `#include <dithering_fragment>
+     float fres = pow( 1.0 - abs( dot( normalize( vNormal ),
+                                       normalize( vViewPosition ) ) ), 2.0 );
+     gl_FragColor.a = clamp( mix( gl_FragColor.a * 0.50,
+                                  gl_FragColor.a * 1.6 + 0.15, fres ), 0.0, 1.0 );`);
+};
+function xrayMat(col,op,side,dim,front){
   const m=new THREE.MeshPhongMaterial({
     color:col.clone().multiplyScalar(dim),
-    specular:0x0a0a0a,shininess:16,
+    // 場上的幾何體是平面著色（每個面一個法向量），高光太集中會變成一塊一塊
+    // 的白斑，所以 shininess 壓低讓它散開
+    specular:front?0x5a5a5a:0x000000, shininess:front?14:0,
     transparent:true,opacity:op,depthWrite:false,side});
-  m.onBeforeCompile=XRAY_PATCH;
-  m.customProgramCacheKey=()=>'xray';   // 補過的 shader 要跟原版分開快取
+  m.onBeforeCompile=front?XRAY_FRONT:XRAY_BACK;
+  m.customProgramCacheKey=()=>front?'xrayF':'xrayB';  // 補過的 shader 要分開快取
   return m;
 }
 function disposeMat(m){
@@ -1414,8 +1434,8 @@ function addMesh(n,geo){
   }else{
     const cnt=geo.getAttribute('position').count;
     geo.clearGroups();geo.addGroup(0,cnt,0);geo.addGroup(0,cnt,1);
-    mat=[xrayMat(base,op*.55,THREE.BackSide,.55),   // 先畫：背後那一面
-         xrayMat(base,op,THREE.FrontSide,1)];       // 後畫：朝著你的那一面
+    mat=[xrayMat(base,op*.55,THREE.BackSide,.55,false), // 先畫：背後那一面
+         xrayMat(base,op,THREE.FrontSide,1,true)];      // 後畫：朝著你的那一面
   }
   const mesh=new THREE.Mesh(geo,mat);
   mesh.userData.id=n.id;
