@@ -172,6 +172,9 @@
     box-shadow:0 4px 18px rgba(0,0,0,.18);
   }
   #hint.on{display:block;}
+  /* 分區標題。八行平鋪找不到東西，分成「動／選／看／快速鍵」四塊 */
+  #hint b{display:block;margin:7px 0 2px;color:#a8452f;font-weight:600;}
+  #hint b:first-child{margin-top:0;}
   #hintBtn{
     position:absolute;left:12px;bottom:12px;z-index:7;
     width:26px;height:26px;padding:0;border-radius:50%;
@@ -323,7 +326,7 @@
 </div>
 
 <aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="hidBar"><span id="hidTxt"></span><button id="showAll" type="button">全部顯示</button></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="row"><span class="lbl">存檔</span><span class="sv never" id="gSaveN">從沒存過</span></div><div class="mode" id="gStore"></div><div class="note" id="gNote"></div></div></aside>
-<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><button id="hintBtn" type="button" title="操作說明">?</button><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<br>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>方向鍵＝推動選取的物件（以目前視角為準）　Ctrl＋上下＝調高度　加按 Shift＝一次走十倍<br>按住 Ctrl 拖物件＝讓它坐到下面那個東西的表面上　拖到一半按 Esc＝取消這次動作<br>Ctrl+H＝把選取的東西藏起來／叫回來（物件樹上的燈泡也可以）</div></div>
+<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><button id="hintBtn" type="button" title="操作說明">?</button><div id="hint"><b>動東西</b>拖物件＝平面移動　拖黃錐＝調高度　拖到一半按 Esc＝取消這次動作<br>拖角落白點＝等比縮放（按住 Shift 連高度一起）　拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度<br>按住 Ctrl 拖＝讓它坐到下面那個東西的表面上<br>方向鍵＝推動（一步＝上面的「格線」）　Ctrl＋上下＝調高度　加按 Shift＝一次走十倍<b>選東西</b>點物件＝選取　Shift＋點＝加選　點空白處＝取消選取<br>空白處拖＝框選（框到的全選，被別的東西擋住也算）<b>看東西</b>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<b>快速鍵</b>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>Ctrl+G＝組合　Ctrl+Shift+G＝拆開　Delete＝刪除　Ctrl+Z＝上一步（加 Shift＝下一步）<br>H＝實體↔孔洞（只選一個時）　Ctrl+H＝藏起來／叫回來（沒選東西＝全部顯示）</div></div>
 <div id="dim"></div>
 <div id="svgDlgBg" class="dlgBg"><div id="svgDlg" class="dlg">
   <h3>匯入 SVG</h3>
