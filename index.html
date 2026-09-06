@@ -139,8 +139,10 @@
   .node.off{opacity:.5;}
   .node.off .fc{text-decoration:line-through;}
   /* 藏了幾個、按一下全部叫回來。釘在物件樹最上面，不跟著捲走 */
-  #hidBar{display:flex;align-items:center;gap:6px;padding:3px 6px;margin-bottom:4px;
-          border-radius:4px;background:var(--panel-2);color:var(--dim);font-size:11px;}
+  /* 釘在物件樹底部，不放在清單裡面——放上面的話一按燈泡整份清單就往下掉
+     一行，眼睛得重新找位置。這裡跟油表一樣不跟著捲。 */
+  #hidBar{display:none;align-items:center;gap:6px;padding:5px 6px;
+          border-top:1px solid var(--line);color:var(--dim);font-size:11px;}
   #hidBar button{margin-left:auto;background:none;border:1px solid var(--line);
           color:var(--dim);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;}
   #hidBar button:hover{color:var(--text);border-color:var(--dim);}
@@ -320,7 +322,7 @@
   <input type="file" id="fileSvg" accept=".svg,image/svg+xml" style="display:none">
 </div>
 
-<aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="row"><span class="lbl">存檔</span><span class="sv never" id="gSaveN">從沒存過</span></div><div class="mode" id="gStore"></div><div class="note" id="gNote"></div></div></aside>
+<aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="hidBar"><span id="hidTxt"></span><button id="showAll" type="button">全部顯示</button></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="row"><span class="lbl">存檔</span><span class="sv never" id="gSaveN">從沒存過</span></div><div class="mode" id="gStore"></div><div class="note" id="gNote"></div></div></aside>
 <div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><button id="hintBtn" type="button" title="操作說明">?</button><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<br>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>方向鍵＝推動選取的物件（以目前視角為準）　Ctrl＋上下＝調高度　加按 Shift＝一次走十倍<br>按住 Ctrl 拖物件＝讓它坐到下面那個東西的表面上　拖到一半按 Esc＝取消這次動作<br>Ctrl+H＝把選取的東西藏起來／叫回來（物件樹上的燈泡也可以）</div></div>
 <div id="dim"></div>
 <div id="svgDlgBg" class="dlgBg"><div id="svgDlg" class="dlg">
@@ -2165,9 +2167,21 @@ function showAllNodes(){
   }
   drawTree();drawInspector();updateHandles();autosave();
 }
+/* 「藏起來 N 個 ＋ 全部顯示」那一條。元素一直在，只切 display，
+   所以它出現或消失都不會把上面的清單推來推去。 */
+function updateHidBar(){
+  const bar=document.getElementById('hidBar');
+  if(!bar)return;
+  const hid=roots.filter(n=>n.hide).length;
+  bar.style.display=hid?'flex':'none';
+  if(hid)document.getElementById('hidTxt').textContent=`🌑 藏起來 ${hid} 個`;
+}
+// 這顆按鈕現在是常駐的元素，接一次就好
+(function(){const b=document.getElementById('showAll');if(b)b.onclick=()=>showAllNodes();})();
 function drawTree(){
   const host=document.getElementById('treeBody');
-  if(!roots.length){host.innerHTML='<div class="empty">還沒有東西。上面加一個形狀。</div>';return;}
+  if(!roots.length){host.innerHTML='<div class="empty">還沒有東西。上面加一個形狀。</div>';
+    updateHidBar();return;}
   const render=(list,rootId)=>{
     let h='';
     for(const n of list){
@@ -2185,11 +2199,8 @@ function drawTree(){
     }
     return h;
   };
-  const hid=roots.filter(n=>n.hide).length;
-  host.innerHTML=(hid?`<div id="hidBar">🌑 藏起來 ${hid} 個<button id="showAll">全部顯示</button></div>`:'')
-                 +render(roots,null);
-  const sa=document.getElementById('showAll');
-  if(sa)sa.onclick=ev=>{ev.stopPropagation();showAllNodes();};
+  host.innerHTML=render(roots,null);
+  updateHidBar();
   host.querySelectorAll('.hb').forEach(b=>b.onclick=ev=>{
     ev.stopPropagation();                       // 按燈泡不要順便選到那一列
     toggleHide([+b.dataset.hide]);
