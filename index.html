@@ -4267,7 +4267,36 @@ resize();updateCam();
   }
   rebuild();
 })();
-(function loop(){requestAnimationFrame(loop);renderer.render(scene,camera);drawPalette();})();
+/* 半透明的東西要「遠的先畫」，否則後面那個會蓋在前面那個上面。
+
+   three.js 排序透明物件時，看的是**物件自己的原點**離相機多遠。可是這個
+   專案的幾何體一律烘焙在世界座標、mesh 的 transform 永遠是單位矩陣，所以
+   每一個 mesh 的原點都是 (0,0,0)——排序拿到的距離全部一樣，等於沒排，
+   畫出來的順序就固定是 roots 的順序。轉視角也不會變，所以會看到「後面那個
+   物件的顏色跑到前面來」。其中一個改成不透明就正常，是因為不透明的走的是
+   另一條路（會寫深度、由深度決定誰擋誰）。
+
+   解法是自己算距離、寫進 renderOrder（排序時它排在最前面看）。用幾何體
+   包圍球的中心，因為那才是東西真正在的地方；拖曳中 mesh 會被暫時套一個
+   位移做預覽，所以要乘上 matrixWorld。只有半透明的需要，數量就是最上層
+   物件的個數，每格算一次不痛。
+
+   互相穿插的兩個透明物件仍然沒有正解（同一個像素上誰前誰後在同一個物件裡
+   就不一致了），那要逐像素的做法才解得掉，不在這個工具的範圍。 */
+const _sortV=new THREE.Vector3();
+function orderTransparent(){
+  for(const m of meshes){
+    const tr=Array.isArray(m.material)?true:!!(m.material&&m.material.transparent);
+    if(!tr){m.renderOrder=0;continue;}
+    const g=m.geometry;
+    if(!g.boundingSphere)g.computeBoundingSphere();
+    if(!g.boundingSphere){m.renderOrder=0;continue;}
+    _sortV.copy(g.boundingSphere.center).applyMatrix4(m.matrixWorld);
+    m.renderOrder=-camera.position.distanceTo(_sortV);   // 遠的先畫
+  }
+}
+(function loop(){requestAnimationFrame(loop);orderTransparent();
+  renderer.render(scene,camera);drawPalette();})();
 </script>
 </body>
 </html>
