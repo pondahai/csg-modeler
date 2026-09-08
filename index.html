@@ -619,6 +619,50 @@ function makeShape(shape,r){
   if(shape==='prism')n.sides=6;  // 幾邊形
   return n;
 }
+/* 新東西放哪裡：從畫面中心往外一圈一圈找第一個不跟現有東西重疊的位置。
+   以前一律生在原點，所以第二個開始就疊在第一個上面。
+   - 起點用 target（視角的落點）而不是原點，所以「你正在看哪裡就放在那裡」。
+   - 只比對在工作平面上的投影方框（XZ），不管高度：疊在別人上面
+     也算重疊，因為使用者要的是「看得到、抓得到」，不是「幾何上沒相交」。
+   - 找不到（場上塞得很滿）就放在畫面中心，讓使用者自己拖。 */
+const UNIT_BOX=new THREE.Box3(new THREE.Vector3(-.5,-.5,-.5),
+                              new THREE.Vector3(.5,.5,.5));
+/* 節點在工作平面上的投影方框（XZ）。每個形狀都剛好塞滿 1×1×1，所以把單位
+   方框套上矩陣就得到它的範圍；組合就往下遞迴。
+   讀的是「樹」而不是場上的 mesh：rebuild() 是分段跑的，連續點兩下元件時
+   第二下還看不到第一個的 mesh，會又疊在一起。 */
+function nodeRects(n,M,out){
+  const m=M.clone().multiply(matrixOf(n));
+  if(n.kind==='group'){for(const k of n.children)nodeRects(k,m,out);return out;}
+  const b=new THREE.Box3().copy(UNIT_BOX).applyMatrix4(m);
+  out.push([b.min.x,b.min.z,b.max.x,b.max.z]);
+  return out;
+}
+function freeSpot(size){
+  const gap=4,w=size[0]+gap,d=size[2]+gap,step=Math.max(w,d);
+  const I=new THREE.Matrix4(),rects=[];
+  for(const n of roots)nodeRects(n,I,rects);
+  const cx=Math.round(target.x),cz=Math.round(target.z);
+  const free=(x,z)=>!rects.some(r=>
+    x-w/2<r[2]&&x+w/2>r[0]&&z-d/2<r[3]&&z+d/2>r[1]);
+  if(free(cx,cz))return [cx,cz];
+  for(let ring=1;ring<=24;ring++){
+    const cand=[];
+    for(let i=-ring;i<=ring;i++)for(let j=-ring;j<=ring;j++)
+      if(Math.max(Math.abs(i),Math.abs(j))===ring)cand.push([i,j]);
+    cand.sort((a,b)=>(a[0]*a[0]+a[1]*a[1])-(b[0]*b[0]+b[1]*b[1]));
+    for(const [i,j] of cand){
+      const x=cx+i*step,z=cz+j*step;
+      if(free(x,z))return [x,z];
+    }
+  }
+  return [cx,cz];
+}
+function placeFree(n){
+  const [x,z]=freeSpot(n.size);
+  n.pos[0]=x;n.pos[2]=z;
+  return n;
+}
 function findNode(id,list=roots){
   for(const n of list){
     if(n.id===id)return n;
@@ -2075,7 +2119,7 @@ function drawInspector(){
 /* ============================================================
    6. 指令
    ============================================================ */
-function add(shape,r){pushUndo();const n=makeShape(shape,r);roots.push(n);selected=[n.id];rebuild();}
+function add(shape,r){pushUndo();const n=placeFree(makeShape(shape,r));roots.push(n);selected=[n.id];rebuild();}
 
 // 組合：原料原封不動搬進 children，只是多包一層
 document.getElementById('btnGroup').onclick=()=>{
@@ -2479,7 +2523,7 @@ document.getElementById('fileStl').onchange=e=>{
                color:SHAPE_COLOR.mesh,
                name:f.name.replace(/\.stl$/i,''),
                tri};
-      roots.push(n);selected=[n.id];rebuild();
+      placeFree(n);roots.push(n);selected=[n.id];rebuild();
     }catch(err){alert('這個 STL 讀不進來：'+err.message);}
   };
   r.onerror=()=>alert('檔案讀取失敗。');
@@ -2768,7 +2812,7 @@ document.getElementById('fileSvg').onchange=e=>{
                color:SHAPE_COLOR.mesh,
                name:f.name.replace(/\.svg$/i,''),
                tri};
-      roots.push(n);selected=[n.id];rebuild();
+      placeFree(n);roots.push(n);selected=[n.id];rebuild();
     }catch(err){alert('這個 SVG 讀不進來：'+err.message);}
     finally{bg.classList.remove('on','wait');}
   };
@@ -3032,7 +3076,7 @@ async function addText(){
              color:SHAPE_COLOR.mesh,
              name:opt.text.replace(/\s+/g,' ').trim().slice(0,12),
              tri};
-    roots.push(n);selected=[n.id];rebuild();
+    placeFree(n);roots.push(n);selected=[n.id];rebuild();
   }catch(err){alert('這幾個字做不出來：'+err.message);}
   finally{bg.classList.remove('on','wait');}
 }
