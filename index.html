@@ -1252,18 +1252,26 @@ const boxHelper=new THREE.Box3Helper(new THREE.Box3(),0xc98a12);
 boxHelper.visible=false;helpLayer.add(boxHelper);
 
 const yHandle=new THREE.Mesh(new THREE.ConeGeometry(2.6,7,16),
-  new THREE.MeshBasicMaterial({color:0xd99a1f}));
-yHandle.name='yHandle';yHandle.visible=false;helpLayer.add(yHandle);
+  new THREE.MeshBasicMaterial({color:0xd99a1f,depthTest:false,depthWrite:false}));
+yHandle.renderOrder=995;yHandle.name='yHandle';yHandle.visible=false;helpLayer.add(yHandle);
 
 // 縮放把手：四角 + 四邊中點（貼在底面）＋ 頂部中央調高度
-const matCorner=new THREE.MeshBasicMaterial({color:0x3f4754});
-const matEdge=new THREE.MeshBasicMaterial({color:0x8a93a3});
-const matTop=new THREE.MeshBasicMaterial({color:0x2f9fd0});
+/* 把手一律畫在所有東西的上面（depthTest:false ＋ 大 renderOrder）。
+   選取本來就是拿把手自己去打射線，不管前面擋著什麼；但畫面上被別的物件蓋住時
+   使用者就看不到、也不敢去點——東西一疊起來就抓不到把手。標註線
+   （DIM_COLOR 那組）用的是同一招。depthWrite 也關掉，免得把手的深度去影響
+   後面才畫的半透明物件。 */
+const HAND_ORDER=995;
+const handTop={depthTest:false,depthWrite:false};
+const matCorner=new THREE.MeshBasicMaterial({color:0x3f4754,...handTop});
+const matEdge=new THREE.MeshBasicMaterial({color:0x8a93a3,...handTop});
+const matTop=new THREE.MeshBasicMaterial({color:0x2f9fd0,...handTop});
 const handles=[];
 for(const sx of [-1,0,1])for(const sz of [-1,0,1]){
   if(!sx&&!sz)continue;
   const corner=!!sx&&!!sz;
   const m=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),corner?matCorner:matEdge);
+  m.renderOrder=HAND_ORDER;
   m.userData={sx,sz,sy:0,axes:corner?'xz':(sx?'x':'z')};
   m.visible=false;helpLayer.add(m);handles.push(m);
 }
@@ -1293,6 +1301,7 @@ function showRings(){
 
 const topHandle=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),matTop);
 topHandle.userData={sx:0,sz:0,sy:1,axes:'y'};
+topHandle.renderOrder=HAND_ORDER;
 topHandle.visible=false;helpLayer.add(topHandle);handles.push(topHandle);
 
 /* ---- 相機控制 ---- */
@@ -1306,7 +1315,10 @@ function updateCam(){
   camera.lookAt(target);
   /* 三段旋轉弧要站在「面對鏡頭」的那一側，所以轉視角時得重新擺一次。
      正在轉物件（弧已經展開成整圈）時不要動它。 */
-  if(ringBox&&mode!=='rotate')
+  /* 把手的大小是照鏡頭距離算的（sph.r），所以滾輪縮放之後要重擺一次，
+     不然要等下一次點選才會變大小——使用者實際回報過。拖曳中不動任何把手。 */
+  if(handBox&&!mode) placeHandles(handBox);
+  else if(ringBox&&mode!=='rotate')
     placeRings(ringBox,ringBox.getCenter(new THREE.Vector3()),Math.max(1.6,sph.r*0.019));
 }
 function resize(){
@@ -1684,7 +1696,7 @@ function placeHandles(b){
       d.sy? c.z : c.z+d.sz*(b.max.z-b.min.z)/2);
     h.scale.setScalar(s);h.visible=true;
   }
-  ringBox=b.clone();placeRings(b,c,s);
+  ringBox=b.clone();handBox=ringBox;placeRings(b,c,s);
 }
 /* 三圈拆開站在物件外面，但轉的中心仍然是物件自己的中心（東西是原地轉的）。
    平躺那一圈放「底部」：正上方已經有藍色的高度把手，放上面會疊在一起，
@@ -1692,7 +1704,7 @@ function placeHandles(b){
    免得擋在物件前面；圈圈比那一面的外接圓大一圈，所以還是繞得出來、點得到。
    位置跟視角有關，所以轉視角時要重算（updateCam），但那時不要重量包圍盒
    ——量一次要走過所有三角形，大模型每一格都量會頓，所以留著 ringBox。 */
-let ringBox=null;
+let ringBox=null,handBox=null;      // 留著包圍盒，轉視角時才不必重量（很貴）
 function placeRings(b,c,s){
   const sz=b.getSize(new THREE.Vector3());
   /* 半徑一律比那一面的外接圓再大一點（gap），圈圈才會繞在輪廓外面而不是趴在
@@ -1725,7 +1737,7 @@ function updateHandles(){
     boxHelper.visible=yHandle.visible=false;
     for(const h of handles)h.visible=false;
     for(const r of rings)r.visible=false;
-    ringBox=null;                       // 不然轉視角時 updateCam 會把弧又擺回來
+    ringBox=handBox=null;               // 不然轉視角時 updateCam 會把弧又擺回來
     hideDim();setDimBox(null);return;
   }
   boxHelper.box.copy(b);boxHelper.visible=true;
@@ -1828,8 +1840,11 @@ function layoutDims(){
   }
   const b=dimBox,c=b.getCenter(new THREE.Vector3()),sz=b.getSize(new THREE.Vector3());
   const s=Math.max(1.6,sph.r*0.019),off=s*2.6,ah=s*1.5;
-  /* 擺在靠近鏡頭的那個角，才不會被物件自己擋住 */
-  const kx=camera.position.x>=c.x?1:-1,kz=camera.position.z>=c.z?1:-1;
+  /* 擺在「離鏡頭遠」的那個角，跟旋轉圈圈同一側：標註線和箭頭本來就是
+     depthTest:false 畫在最上面的，被物件擋住也照樣看得見，所以不必為了看得見
+     把它們挪到你和模型之間——那反而會橫在正在看的東西前面。
+     專案擁有者要求改的（原本擺在近的那個角）。 */
+  const kx=camera.position.x>=c.x?-1:1,kz=camera.position.z>=c.z?-1:1;
   const X0=kx>0?b.max.x:b.min.x,Z0=kz>0?b.max.z:b.min.z;
   const xl=X0+kx*off,zl=Z0+kz*off;
   const f=v=>(Math.round(v*10)/10).toFixed(1);
