@@ -165,6 +165,16 @@
     box-shadow:0 2px 10px rgba(0,0,0,.45);
   }
   #dim span{font-weight:400;opacity:.7;}
+  /* 選取時的長寬高標註（唯讀，點不到） */
+  .dimLbl{
+    position:fixed;display:none;pointer-events:none;z-index:4;
+    transform:translate(-50%,-50%);
+    background:rgba(255,255,255,.92);color:#3a4150;
+    padding:1px 6px;border-radius:3px;font-size:12px;font-weight:600;
+    font-variant-numeric:tabular-nums;white-space:nowrap;
+    box-shadow:0 1px 4px rgba(0,0,0,.25);
+  }
+  .dimLbl span{font-weight:400;opacity:.6;}
   #marquee{
     position:absolute;display:none;pointer-events:none;z-index:6;
     border:1px solid #3b7fd4;background:rgba(59,127,212,.14);
@@ -274,6 +284,7 @@
 <aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="note" id="gNote"></div></div></aside>
 <div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><button id="hintBtn" type="button" title="操作說明">?</button><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<br>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>按住 Ctrl 拖物件＝讓它坐到下面那個東西的表面上　拖到一半按 Esc＝取消這次動作</div></div>
 <div id="dim"></div>
+<div id="dimLblX" class="dimLbl"></div><div id="dimLblY" class="dimLbl"></div><div id="dimLblZ" class="dimLbl"></div>
 <div id="svgDlgBg" class="dlgBg"><div id="svgDlg" class="dlg">
   <h3>匯入 SVG</h3>
   <div class="sub" id="svgName"></div>
@@ -1160,10 +1171,10 @@ function updateHandles(){
     boxHelper.visible=yHandle.visible=false;
     for(const h of handles)h.visible=false;
     for(const r of rings)r.visible=false;
-    hideDim();return;
+    hideDim();setDimBox(null);return;
   }
   boxHelper.box.copy(b);boxHelper.visible=true;
-  placeHandles(b);
+  placeHandles(b);setDimBox(b);
 }
 /* 拖曳時的即時尺寸讀數 */
 const dimEl=document.getElementById('dim');
@@ -1193,6 +1204,101 @@ function showAngle(deg,c){
   dimEl.style.display='block';
 }
 function hideDim(){if(dimEl)dimEl.style.display='none';}
+
+/* ------------------------------------------------------------
+   選取時的長寬高標註線
+   唯讀的顯示：自己一層 dimLayer，不加進 meshes／handles，所以點不到、
+   框選不到（跟鬼影和工作平面玻璃同樣的做法）。完全不碰幾何體、不重算
+   CSG，只讀包圍盒，所以再大的模型也是瞬間的事。
+   包圍盒由 setDimBox() 從外面餵進來（更新把手的時候、拖曳預覽的時候），
+   layoutDims() 只負責照相機的角度重新擺位，所以每一幀重畫不會去碰
+   computeBoundingBox()——那個對幾十萬個頂點是每幀都不能做的事。
+   ------------------------------------------------------------ */
+const dimLayer=new THREE.Group();dimLayer.visible=false;scene.add(dimLayer);
+const DIM_COLOR=0x4a5260;
+function mkDimSet(){
+  const lm=new THREE.LineBasicMaterial({color:DIM_COLOR,depthTest:false,
+                                        transparent:true,opacity:.85});
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(18),3));
+  const line=new THREE.LineSegments(g,lm);line.renderOrder=990;
+  const cm=new THREE.MeshBasicMaterial({color:DIM_COLOR,depthTest:false,
+                                        transparent:true,opacity:.95});
+  const cone=new THREE.ConeGeometry(.34,1,12);
+  const a0=new THREE.Mesh(cone,cm),a1=new THREE.Mesh(cone,cm);
+  a0.renderOrder=a1.renderOrder=991;
+  const grp=new THREE.Group();grp.add(line,a0,a1);
+  grp.userData={g,a0,a1};
+  return grp;
+}
+const dimSets={x:mkDimSet(),y:mkDimSet(),z:mkDimSet()};
+dimLayer.add(dimSets.x,dimSets.y,dimSets.z);
+const dimLbl={x:document.getElementById('dimLblX'),
+              y:document.getElementById('dimLblY'),
+              z:document.getElementById('dimLblZ')};
+const DIM_UP=new THREE.Vector3(0,1,0);
+/* p0→p1 是標註線本身，e0／e1 是包圍盒上對應的兩個角（延伸線接過去） */
+function putDim(grp,p0,p1,e0,e1,ah){
+  const pos=grp.userData.g.attributes.position;
+  const arr=pos.array;
+  arr[0]=p0.x;arr[1]=p0.y;arr[2]=p0.z;  arr[3]=p1.x;arr[4]=p1.y;arr[5]=p1.z;
+  arr[6]=e0.x;arr[7]=e0.y;arr[8]=e0.z;  arr[9]=p0.x;arr[10]=p0.y;arr[11]=p0.z;
+  arr[12]=e1.x;arr[13]=e1.y;arr[14]=e1.z;arr[15]=p1.x;arr[16]=p1.y;arr[17]=p1.z;
+  pos.needsUpdate=true;
+  grp.userData.g.computeBoundingSphere();
+  const d=p1.clone().sub(p0).normalize();
+  const {a0,a1}=grp.userData;
+  a0.quaternion.setFromUnitVectors(DIM_UP,d.clone().negate());
+  a0.position.copy(p0).addScaledVector(d,ah/2);a0.scale.setScalar(ah);
+  a1.quaternion.setFromUnitVectors(DIM_UP,d);
+  a1.position.copy(p1).addScaledVector(d,-ah/2);a1.scale.setScalar(ah);
+  grp.visible=true;
+}
+function placeDimLbl(el,p,txt){
+  const q=p.clone().project(camera);
+  if(q.z>1){el.style.display='none';return;}
+  const r=renderer.domElement.getBoundingClientRect();
+  el.style.left=(r.left+(q.x*.5+.5)*r.width)+'px';
+  el.style.top=(r.top+(-q.y*.5+.5)*r.height)+'px';
+  el.innerHTML=txt;el.style.display='block';
+}
+let dimBox=null;
+function setDimBox(b){dimBox=b?b.clone():null;if(!b)layoutDims();}
+const V3=(x,y,z)=>new THREE.Vector3(x,y,z);
+function layoutDims(){
+  if(!dimBox){
+    dimLayer.visible=false;
+    for(const k in dimLbl)dimLbl[k].style.display='none';
+    return;
+  }
+  const b=dimBox,c=b.getCenter(new THREE.Vector3()),sz=b.getSize(new THREE.Vector3());
+  const s=Math.max(1.6,sph.r*0.019),off=s*2.6,ah=s*1.5;
+  /* 擺在靠近鏡頭的那個角，才不會被物件自己擋住 */
+  const kx=camera.position.x>=c.x?1:-1,kz=camera.position.z>=c.z?1:-1;
+  const X0=kx>0?b.max.x:b.min.x,Z0=kz>0?b.max.z:b.min.z;
+  const xl=X0+kx*off,zl=Z0+kz*off;
+  const f=v=>(Math.round(v*10)/10).toFixed(1);
+  const tiny=1e-4;
+  // 寬（X）：貼著底面，往 z 的外側讓開
+  if(sz.x>tiny){
+    putDim(dimSets.x,V3(b.min.x,b.min.y,zl),V3(b.max.x,b.min.y,zl),
+                     V3(b.min.x,b.min.y,Z0),V3(b.max.x,b.min.y,Z0),ah);
+    placeDimLbl(dimLbl.x,V3(c.x,b.min.y,zl),`寬 ${f(sz.x)}<span> mm</span>`);
+  }else{dimSets.x.visible=false;dimLbl.x.style.display='none';}
+  // 深（Z）：貼著底面，往 x 的外側讓開
+  if(sz.z>tiny){
+    putDim(dimSets.z,V3(xl,b.min.y,b.min.z),V3(xl,b.min.y,b.max.z),
+                     V3(X0,b.min.y,b.min.z),V3(X0,b.min.y,b.max.z),ah);
+    placeDimLbl(dimLbl.z,V3(xl,b.min.y,c.z),`深 ${f(sz.z)}<span> mm</span>`);
+  }else{dimSets.z.visible=false;dimLbl.z.style.display='none';}
+  // 高（Y）：站在那個角的外側
+  if(sz.y>tiny){
+    putDim(dimSets.y,V3(xl,b.min.y,zl),V3(xl,b.max.y,zl),
+                     V3(X0,b.min.y,Z0),V3(X0,b.max.y,Z0),ah);
+    placeDimLbl(dimLbl.y,V3(xl,c.y,zl),`高 ${f(sz.y)}<span> mm</span>`);
+  }else{dimSets.y.visible=false;dimLbl.y.style.display='none';}
+  dimLayer.visible=true;
+}
 
 /* ============================================================
    4. 滑鼠互動
@@ -1569,7 +1675,7 @@ function liveMove(){
   for(const m of selectedMeshes()){
     m.geometry.computeBoundingBox();
     b.union(new THREE.Box3().copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld));any=true;}
-  if(any){boxHelper.box.copy(b);placeHandles(b);showDim(b);}
+  if(any){boxHelper.box.copy(b);placeHandles(b);showDim(b);setDimBox(b);}
   drawInspector();
 }
 // 縮放預覽：直接縮 mesh，放開才重算 CSG（不然每一格都要重算會頓）
@@ -1583,7 +1689,7 @@ function liveScale(F,anchor){
   for(const m of selectedMeshes()){
     m.geometry.computeBoundingBox();
     b.union(new THREE.Box3().copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld));any=true;}
-  if(any){boxHelper.box.copy(b);placeHandles(b);showDim(b);}
+  if(any){boxHelper.box.copy(b);placeHandles(b);showDim(b);setDimBox(b);}
   drawInspector();
 }
 /* 拖到一半後悔了：按 Esc 取消這一次動作。
@@ -3359,7 +3465,7 @@ buildPalette();
 })();
 document.getElementById('busyStop').onclick=cancelJob;
 resize();updateCam();rebuild();
-(function loop(){requestAnimationFrame(loop);renderer.render(scene,camera);drawPalette();})();
+(function loop(){requestAnimationFrame(loop);layoutDims();renderer.render(scene,camera);drawPalette();})();
 </script>
 </body>
 </html>
