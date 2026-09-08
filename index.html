@@ -39,6 +39,11 @@
     display:flex;align-items:center;gap:6px;padding:8px 10px;flex-wrap:wrap;
   }
   #bar .sep{width:1px;height:22px;background:var(--line);margin:0 4px;}
+  #bar label.snap{display:flex;align-items:center;gap:5px;color:var(--dim,#9aa4b2);}
+  #bar select{
+    font:inherit;color:var(--text);background:var(--panel-2);
+    border:1px solid var(--line);border-radius:5px;padding:4px 6px;cursor:pointer;
+  }
   button{
     font:inherit;color:var(--text);background:var(--panel-2);
     border:1px solid var(--line);border-radius:5px;padding:5px 11px;cursor:pointer;
@@ -94,7 +99,10 @@
   button.pal:hover{background:rgba(255,255,255,.05);border-color:var(--focus);}
   button.pal:hover span{color:#fff;}
   button.pal:active{background:rgba(255,255,255,.12);}
-  #view{grid-area:view;position:relative;}
+  /* min-width/height:0 一定要有：格線容器的欄位預設不肯縮到比裡面的東西小，
+     而 3D 畫布在面板收起來時已經被撐寬了。少了這兩行，右邊面板收起來之後
+     就叫不回來——它會被推到視窗外面被裁掉（程式有打開，只是看不見）。 */
+  #view{grid-area:view;position:relative;min-width:0;min-height:0;overflow:hidden;}
   /* 收起側邊面板：整欄寬度收成 0，畫面自己補上去 */
   body.noTree{grid-template-columns:0 1fr 232px;}
   body.noInsp{grid-template-columns:250px 1fr 0;}
@@ -122,6 +130,22 @@
   .node .rl{color:var(--dim);font-size:11px;}
   .node .fc{margin-left:auto;padding-left:6px;color:var(--dim);font-size:10px;
             font-variant-numeric:tabular-nums;flex:none;}
+  /* 燈泡：平常淡淡的，滑過去才亮；藏起來的一直亮著，
+     因為那時候它是「這個東西現在是關的」的唯一記號 */
+  .node .hb{flex:none;width:16px;text-align:center;background:none;border:none;
+            color:var(--dim);cursor:pointer;font-size:11px;padding:0;opacity:0;}
+  .node:hover .hb,.node.off .hb{opacity:1;}
+  .node .hb:hover{color:var(--text);}
+  .node.off{opacity:.5;}
+  .node.off .fc{text-decoration:line-through;}
+  /* 藏了幾個、按一下全部叫回來。釘在物件樹最上面，不跟著捲走 */
+  /* 釘在物件樹底部，不放在清單裡面——放上面的話一按燈泡整份清單就往下掉
+     一行，眼睛得重新找位置。這裡跟油表一樣不跟著捲。 */
+  #hidBar{display:none;align-items:center;gap:6px;padding:5px 6px;
+          border-top:1px solid var(--line);color:var(--dim);font-size:11px;}
+  #hidBar button{margin-left:auto;background:none;border:1px solid var(--line);
+          color:var(--dim);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;}
+  #hidBar button:hover{color:var(--text);border-color:var(--dim);}
   .kids{margin-left:13px;border-left:1px solid var(--line);padding-left:6px;}
   .row{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
   .row label{width:16px;color:var(--dim);}
@@ -138,6 +162,21 @@
   .seg button.on{background:var(--solid);border-color:var(--solid);color:#06121b;font-weight:600;}
   .seg button.on.hole{background:var(--hole);border-color:var(--hole);color:#1b060c;}
   .grp{margin:14px 0 6px;padding-top:12px;border-top:1px solid var(--line);}
+  /* 尺寸／位置／旋轉排成九宮格：本來是三段標題＋九行，佔掉面板一大截，
+     顏色和透明度都要捲才看得到。橫的是 X/Y/Z，直的是三組，共四行。
+     欄位因此只有 55px 左右，所以要藏掉數字框右邊那對上下小箭頭
+     （純外觀，鍵盤上下鍵照樣加減）並縮小字級，不然數字會被切掉。 */
+  .g9{display:grid;grid-template-columns:auto repeat(3,1fr);gap:3px;align-items:center;}
+  .g9 .hd{color:var(--dim);font-size:10px;text-align:center;}
+  /* 單位另起一行墊在組名下面：橫著寫「尺寸 mm」的話光這一欄就吃掉 43px，
+     輸入框只剩 42px；疊成兩行之後這一欄剩 24px，三個格子各多拿到 6px。 */
+  .g9 .rl{color:var(--dim);font-size:11px;line-height:1.15;padding-right:2px;
+    text-align:right;}
+  .g9 .rl small{display:block;font-size:9px;opacity:.7;}
+  .g9 input[type=number]{font-size:11px;padding:4px 2px;text-align:center;
+    -moz-appearance:textfield;}
+  .g9 input[type=number]::-webkit-outer-spin-button,
+  .g9 input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
   .empty{color:var(--dim);padding:6px;}
   /* 操作說明預設收起來，只留左下角一顆問號。字很多，擋掉的畫面比它教的還多，
      而且看過一次就不用再看了。 */
@@ -148,6 +187,9 @@
     box-shadow:0 4px 18px rgba(0,0,0,.18);
   }
   #hint.on{display:block;}
+  /* 分區標題。八行平鋪找不到東西，分成「動／選／看／快速鍵」四塊 */
+  #hint b{display:block;margin:7px 0 2px;color:#a8452f;font-weight:600;}
+  #hint b:first-child{margin-top:0;}
   #hintBtn{
     position:absolute;left:12px;bottom:12px;z-index:7;
     width:26px;height:26px;padding:0;border-radius:50%;
@@ -189,10 +231,25 @@
   #gauge .lbl{width:34px;flex:none;}
   #gauge .val{width:52px;flex:none;text-align:right;}
   #gauge .track{flex:1;height:6px;border-radius:3px;background:var(--ink);overflow:hidden;}
-  #gauge .fill{height:100%;width:0;background:#5aa469;transition:width .18s linear;}
+  /* display:block 一定要有。fill 是個 <span>，預設是行內文字，而行內文字不吃
+     寬高——少了這行，油針算得再準也永遠是 0×0，畫面上只看得到底槽。 */
+  #gauge .fill{display:block;height:100%;width:0;background:#5aa469;
+               transition:width .18s linear;}
   #gauge .fill.warn{background:#e0a13b;}
   #gauge .fill.hot{background:#d2523f;}
+  /* 不能暫存時，那一根要長得跟「空的」不一樣——斜紋是「沒有這個東西」，
+     空槽是「還沒用到」。看起來像 0 的東西，使用者會以為是壞掉。 */
+  #gauge .track.off{background:repeating-linear-gradient(-45deg,
+     var(--ink) 0 3px, transparent 3px 6px);}
+  #gauge .val.off{opacity:.65;}
+  #gauge .sv{flex:1;text-align:right;}
+  #gauge .sv.never{color:#f0836e;font-weight:600;}
+  #gauge .sv.stale{color:#e0a13b;}
   #gauge .note{margin-top:5px;color:#f0836e;font-weight:600;display:none;white-space:normal;line-height:1.35;}
+  /* 「暫存放在哪裡」是常駐狀態不是警報，用淡的字。一直紅字喊會被當成背景，
+     真正的警告（算不出來、暫存滿了）反而看不見。只有「完全不能暫存」才轉紅。 */
+  #gauge .mode{margin-top:5px;color:var(--dim);white-space:normal;line-height:1.35;}
+  #gauge .mode.bad{color:#f0836e;font-weight:600;}
   #busy{
     position:absolute;top:12px;left:50%;transform:translateX(-50%);
     background:var(--focus);color:#241d05;padding:4px 6px 4px 12px;border-radius:20px;
@@ -259,6 +316,18 @@
   <button id="btnRedo">下一步</button>
   <div class="sep"></div>
   <button id="btnFit">看全部</button>
+  <div class="sep"></div>
+  <label class="snap" title="拖曳移動、縮放時每一格跳多少毫米">格線
+    <select id="snapSel">
+      <option value="10">10 mm</option>
+      <option value="5">5 mm</option>
+      <option value="2">2 mm</option>
+      <option value="1" selected>1 mm</option>
+      <option value="0.5">0.5 mm</option>
+      <option value="0.25">0.25 mm</option>
+      <option value="0.1">0.1 mm</option>
+    </select>
+  </label>
   <div class="menu" id="fileMenu">
     <button id="btnFile">檔案</button>
     <div class="pop">
@@ -281,8 +350,8 @@
   <input type="file" id="fileSvg" accept=".svg,image/svg+xml" style="display:none">
 </div>
 
-<aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="note" id="gNote"></div></div></aside>
-<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><button id="hintBtn" type="button" title="操作說明">?</button><div id="hint">拖物件＝平面移動　拖黃錐＝調高度　拖角落白點＝等比縮放（按住 Shift 連高度一起）<br>拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度　空白處拖＝框選（Shift 加選）<br>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<br>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>按住 Ctrl 拖物件＝讓它坐到下面那個東西的表面上　拖到一半按 Esc＝取消這次動作</div></div>
+<aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="hidBar"><span id="hidTxt"></span><button id="showAll" type="button">全部顯示</button></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="row"><span class="lbl">存檔</span><span class="sv never" id="gSaveN">從沒存過</span></div><div class="mode" id="gStore"></div><div class="note" id="gNote"></div></div></aside>
+<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><button id="hintBtn" type="button" title="操作說明">?</button><div id="hint"><b>動東西</b>拖物件＝平面移動　拖黃錐＝調高度　拖到一半按 Esc＝取消這次動作<br>拖角落白點＝等比縮放（按住 Shift 連高度一起）　拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度<br>按住 Ctrl 拖＝讓它坐到下面那個東西的表面上<br>方向鍵＝推動（一步＝上面的「格線」）　Ctrl＋上下＝調高度　加按 Shift＝一次走十倍<b>選東西</b>點物件＝選取　Shift＋點＝加選　點空白處＝取消選取<br>空白處拖＝框選（框到的全選，被別的東西擋住也算）<b>看東西</b>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<b>快速鍵</b>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>Ctrl+G＝組合　Ctrl+Shift+G＝拆開　Delete＝刪除　Ctrl+Z＝上一步（加 Shift＝下一步）<br>H＝實體↔孔洞（只選一個時）　Ctrl+H＝藏起來／叫回來（沒選東西＝全部顯示）</div></div>
 <div id="dim"></div>
 <div id="dimLblX" class="dimLbl"></div><div id="dimLblY" class="dimLbl"></div><div id="dimLblZ" class="dimLbl"></div>
 <div id="svgDlgBg" class="dlgBg"><div id="svgDlg" class="dlg">
@@ -451,52 +520,248 @@ class Poly {
    把 generator 一口氣跑完（drain），匯出 STL／OBJ 那條路還是用它們。 */
 const YIELD_EVERY=6000;
 function drain(it){let r=it.next();while(!r.done)r=it.next();return r.value;}
+/* ---- 包圍盒工具：讓布林運算跳過「離得很遠、根本切不到」的東西 ----
+   BSP 判斷內外靠的是完整封閉的殼，所以殼一定在自己的包圍盒裡面。
+   反過來說：完全落在殼的包圍盒外面的多邊形，一定在實體外面——
+   clipPolygons 本來就會把它原封不動留下來，不必真的送進樹裡一路切。
+   在大模型上挖一個小洞時，絕大多數的面都屬於這一類，一個盒子測試就
+   打發掉，省下整趟走訪。留下來的東西完全一樣（連物件本身都是同一個），
+   只是少繞路。盒子一律留 EPS 的餘裕，寧可多算也不要少算。 */
+function polyBox(p){
+  const vs=p.vertices;let q=vs[0].pos;
+  let x0=q.x,x1=q.x,y0=q.y,y1=q.y,z0=q.z,z1=q.z;
+  for(let i=1;i<vs.length;i++){
+    q=vs[i].pos;
+    if(q.x<x0)x0=q.x;else if(q.x>x1)x1=q.x;
+    if(q.y<y0)y0=q.y;else if(q.y>y1)y1=q.y;
+    if(q.z<z0)z0=q.z;else if(q.z>z1)z1=q.z;
+  }
+  return [x0,y0,z0,x1,y1,z1];
+}
+function boxHit(a,b){
+  return !(a[3]<b[0]-EPS||a[0]>b[3]+EPS||
+           a[4]<b[1]-EPS||a[1]>b[4]+EPS||
+           a[5]<b[2]-EPS||a[2]>b[5]+EPS);
+}
+function polyFar(p,B){
+  const vs=p.vertices;let q=vs[0].pos;
+  let x0=q.x,x1=q.x,y0=q.y,y1=q.y,z0=q.z,z1=q.z;
+  for(let i=1;i<vs.length;i++){
+    q=vs[i].pos;
+    if(q.x<x0)x0=q.x;else if(q.x>x1)x1=q.x;
+    if(q.y<y0)y0=q.y;else if(q.y>y1)y1=q.y;
+    if(q.z<z0)z0=q.z;else if(q.z>z1)z1=q.z;
+  }
+  return x1<B[0]-EPS||x0>B[3]+EPS||
+         y1<B[1]-EPS||y0>B[4]+EPS||
+         z1<B[2]-EPS||z0>B[5]+EPS;
+}
+/* ---- 挑切割面 ----
+   原本是拿手上第一個多邊形的平面（csg.js 的原始寫法）。方塊圓柱只有十幾面時
+   無所謂，但匯入的 STL 是幾萬個朝向雜亂的小三角形，樹會退化成一條鏈，深度
+   從 log n 變成 n——這正是耗時隨面數平方成長的來源。
+
+   **凸的東西用「模型自己的面」永遠切不開。** 球、圓柱、多數匯入的模型都是
+   凸的或接近凸的：每一個面的平面都把其他所有面留在同一側（那就是凸的定義），
+   所以不管挑哪一個面，都是「一邊 0 個、另一邊全部」。光是改成「挑最平衡的
+   面」沒有用，實測反而慢 30%，因為挑不出好的還多花了評分的錢。
+
+   所以再給它一條路：面的平面都切不開時，改用**空間對半切**——沿著最長的那
+   一軸，切在多邊形中心的中位數上。那個平面不是實體的表面（下面叫 aux），
+   純粹用來把空間分兩半，樹就真的分岔了。
+
+   代價是樹上多了一種「不是表面」的平面，於是每個節點要自己記住「我這塊空間
+   是實體裡面還是外面」（`st`，見 Bsp）。原本的規則「前面＝外、後面＝內」只
+   對表面的平面成立。
+
+   評分：切碎最貴（切開一個就多一個面，而且一路傳下去），共面的算加分（它們
+   留在節點上，兩邊都不必再處理）。候選和評分都只取樣，等距、不用亂數，所以
+   同一份輸入每次結果完全一樣。 */
+const SPLIT_CANDIDATES=12, SPLIT_SAMPLE=160, SPLIT_COST=8;
+const SPLIT_MIN_RATIO=0.15;      // 少的那邊佔不到這個比例，就當作「切不開」
+const AUX_MIN=600;               /* 只有多邊形多到這個數量才准動用空間對半切。
+   這道門檻是整段的關鍵：空間對半切會把跨過那一刀的三角形全部切開，一路遞迴
+   下去就雪崩——實測不設限時 1104 面會變成 118550 面、慢 450 倍。而凸的東西
+   用表面的平面建樹雖然是一條鏈（慢），卻一個三角形都不會被切碎。所以只在
+   「堆很大」的時候切幾刀把它分開，小堆交回原本的作法：切的刀數是
+   log(n/AUX_MIN)，碎片有限，而每個小堆的成本固定，總成本就從平方變成接近
+   線性。 */
+function choosePlane(ps){
+  const n=ps.length;
+  if(n<=2)return {plane:ps[0].plane,aux:false};
+  const cN=Math.min(SPLIT_CANDIDATES,n), sN=Math.min(SPLIT_SAMPLE,n);
+  let best=ps[0].plane, bestScore=Infinity, bestMin=0;
+  for(let c=0;c<cN;c++){
+    const pl=ps[Math.floor((c+0.5)*n/cN)].plane;
+    const r=rate(ps,sN,pl);
+    if(r.score<bestScore){bestScore=r.score;best=pl;bestMin=r.min;}
+  }
+  if(bestMin>=sN*SPLIT_MIN_RATIO||n<AUX_MIN)return {plane:best,aux:false};
+  return {plane:auxPlane(ps,sN),aux:true};
+}
+/* 拿一批取樣的多邊形去試一個平面：切碎最貴，兩邊差得多也扣分，
+   共面的算加分（它們留在節點上，兩邊都不必再處理）。 */
+function rate(ps,sN,pl){
+  const n=ps.length;
+  const nx=pl.normal.x,ny=pl.normal.y,nz=pl.normal.z,w=pl.w;
+  let front=0,back=0,split=0,co=0;
+  for(let s=0;s<sN;s++){
+    const vs=ps[Math.floor((s+0.5)*n/sN)].vertices;
+    let f=0,b=0;
+    for(let i=0;i<vs.length;i++){
+      const q=vs[i].pos, t=nx*q.x+ny*q.y+nz*q.z-w;
+      if(t<-EPS)b=1;else if(t>EPS)f=1;
+    }
+    if(f&&b)split++;else if(f)front++;else if(b)back++;else co++;
+  }
+  return {score:split*SPLIT_COST+Math.abs(front-back)-co,
+          min:Math.min(front+split,back+split)};
+}
+/* 空間對半切：三個軸 × 三個位置（四分之一／中間／四分之三）試過去，
+   挑切碎最少又夠平衡的那一刀。位置多試幾個是為了切在「空隙」上。 */
+function auxPlane(ps,sN){
+  const n=ps.length, c=[[],[],[]];
+  for(let s=0;s<sN;s++){
+    const vs=ps[Math.floor((s+0.5)*n/sN)].vertices;
+    let x=0,y=0,z=0;
+    for(let i=0;i<vs.length;i++){const q=vs[i].pos;x+=q.x;y+=q.y;z+=q.z;}
+    c[0].push(x/vs.length);c[1].push(y/vs.length);c[2].push(z/vs.length);
+  }
+  const AX=[new V(1,0,0),new V(0,1,0),new V(0,0,1)];
+  let best=null,bestScore=Infinity;
+  for(let a=0;a<3;a++){
+    const sorted=c[a].slice().sort((x,y)=>x-y);
+    for(const q of [0.25,0.5,0.75]){
+      const pl=new Plane(AX[a],sorted[Math.min(sorted.length-1,Math.floor(sorted.length*q))]);
+      const r=rate(ps,sN,pl);
+      if(r.min>0&&r.score<bestScore){bestScore=r.score;best=pl;}
+    }
+  }
+  return best||new Plane(AX[0],c[0][0]);
+}
 class Bsp {
-  constructor(polys){this.plane=null;this.front=null;this.back=null;this.polygons=[];if(polys)this.build(polys);}
+  constructor(polys){this.plane=null;this.front=null;this.back=null;this.polygons=[];
+    this.box=null;this.boxOk=false;
+    /* st：這個節點所代表的那塊空間是實體的裡面（1）還是外面（0）。
+       aux 為真時這個平面不是實體的表面，只是拿來分空間的，所以兩邊都繼承
+       同一個 st；一般（表面的）平面才適用「前面＝外、後面＝內」。
+       根節點的 st 同時就是「整棵樹有沒有被 invert 過」——反轉代表補集，
+       外面變成裡面，包圍盒剪枝的方向要跟著顛倒。 */
+    this.st=0;this.aux=false;
+    if(polys)this.build(polys);}
+  /* 每個節點記住「我這一支底下的東西佔哪個範圍」。後序走訪算一遍就好，
+     只有 buildG 加進新的多邊形時才需要重算（clipTo 只會讓多邊形變少，
+     舊盒子仍然罩得住，當成保守估計繼續用是安全的）。 */
+  ensureBoxes(){drain(this.ensureBoxesG());}
+  /* 這三個（ensureBoxes／invert／allPolygons）都是「走一遍整棵樹」，
+     成本跟面數成正比，所以也要切段——64k 面實測分別是 377／178／57ms，
+     合起來就是一個 848ms 的卡頓，面數再上去就會撞到「網頁沒有回應」。 */
+  *ensureBoxesG(){
+    if(this.boxOk)return;
+    const order=[],st=[this];
+    while(st.length){
+      const n=st.pop();order.push(n);
+      if(n.front)st.push(n.front);
+      if(n.back)st.push(n.back);
+    }
+    let budget=YIELD_EVERY;
+    for(let i=order.length-1;i>=0;i--){
+      const n=order[i];
+      let x0=Infinity,y0=Infinity,z0=Infinity,x1=-Infinity,y1=-Infinity,z1=-Infinity;
+      for(const p of n.polygons)for(const v of p.vertices){
+        const q=v.pos;
+        if(q.x<x0)x0=q.x;if(q.x>x1)x1=q.x;
+        if(q.y<y0)y0=q.y;if(q.y>y1)y1=q.y;
+        if(q.z<z0)z0=q.z;if(q.z>z1)z1=q.z;
+      }
+      for(const c of [n.front,n.back])if(c&&c.box){
+        const b=c.box;
+        if(b[0]<x0)x0=b[0];if(b[3]>x1)x1=b[3];
+        if(b[1]<y0)y0=b[1];if(b[4]>y1)y1=b[4];
+        if(b[2]<z0)z0=b[2];if(b[5]>z1)z1=b[5];
+      }
+      n.box=(x0<=x1)?[x0,y0,z0,x1,y1,z1]:null;
+      n.boxOk=true;
+      if(--budget<=0){budget=YIELD_EVERY;yield;}
+    }
+  }
   clone(){
     const root=new Bsp();
     const stack=[[this,root]];
     while(stack.length){
       const [s,d]=stack.pop();
       d.plane=s.plane&&s.plane.clone();
+      d.st=s.st;d.aux=s.aux;
       d.polygons=s.polygons.map(p=>p.clone());
       if(s.front){d.front=new Bsp();stack.push([s.front,d.front]);}
       if(s.back){d.back=new Bsp();stack.push([s.back,d.back]);}
     }
     return root;
   }
-  invert(){
+  invert(){drain(this.invertG());}
+  *invertG(){
+    /* 反轉之後這棵樹代表的是「補集」——原本實體外面的全部變成實體。
+       盒子剪枝的前提（實體一定在盒子裡）因此顛倒，靠 st 記著現在是哪一邊。 */
     const stack=[this];
+    let budget=YIELD_EVERY;
     while(stack.length){
       const n=stack.pop();
+      n.st^=1;                       // 裡外對調
       for(const p of n.polygons)p.flip();
       if(n.plane)n.plane.flip();
       const t=n.front;n.front=n.back;n.back=t;
       if(n.front)stack.push(n.front);
       if(n.back)stack.push(n.back);
+      if((budget-=n.polygons.length+1)<=0){budget=YIELD_EVERY;yield;}
     }
   }
   *clipPolygonsG(polys){
     const out=[];
-    const stack=[[this,polys]];
+    /* 先篩掉離這棵樹很遠的：它們一定落在原本那個實體的外面，答案不必
+       走一趟樹也知道——沒反轉時整個留下，反轉（補集）時整個丟掉。
+       大模型挖小洞時這一關就打發掉九成以上的面。 */
+    yield* this.ensureBoxesG();
+    let todo=polys;
+    if(this.box&&polys.length){
+      const near=[],keepFar=this.st===0;
+      let quota=YIELD_EVERY;
+      for(const p of polys){
+        if(--quota<=0){quota=YIELD_EVERY;yield;}
+        if(polyFar(p,this.box)){if(keepFar)out.push(p);}
+        else near.push(p);
+      }
+      todo=near;
+    }
+    const stack=[[this,todo]];
     let budget=YIELD_EVERY;
     while(stack.length){
       const [n,ps]=stack.pop();
       if((budget-=ps.length)<=0){budget=YIELD_EVERY;yield;}
-      if(!n.plane){for(const p of ps)out.push(p);continue;}
+      if(!n.plane){if(n.st===0)for(const p of ps)out.push(p);continue;}
       const front=[],back=[];
       for(const p of ps)n.plane.splitPolygon(p,front,back,front,back);
+      /* 沒有子樹的那一邊就是一塊均勻的空間，落在外面的留下、裡面的丟掉。
+         表面的平面是「前面＝外、後面＝內」；aux 平面兩邊都跟自己一樣。 */
+      const fSt=n.aux?n.st:0, bSt=n.aux?n.st:1;
       /* 先推後面再推前面，pop 出來就是前面先走，跟遞迴版順序相同 */
       if(n.back)stack.push([n.back,back]);
+      else if(bSt===0)for(const p of back)out.push(p);
       if(n.front)stack.push([n.front,front]);
-      else for(const p of front)out.push(p);
+      else if(fSt===0)for(const p of front)out.push(p);
     }
     return out;
   }
   *clipToG(bsp){
+    /* 自己這邊也用盒子剪枝：整支子樹都離對方很遠的話，裡面每一個多邊形
+       都在對方外面，clip 之後原封不動，連走都不必走進去。
+       對方反轉過（代表補集）時這條不成立，那時候交給 clipPolygonsG
+       裡面那一關逐個處理。 */
+    yield* bsp.ensureBoxesG();yield* this.ensureBoxesG();
+    const B=bsp.st?null:bsp.box;
     const stack=[this];
     while(stack.length){
       const n=stack.pop();
+      if(B&&n.box&&!boxHit(n.box,B))continue;
       n.polygons=yield* bsp.clipPolygonsG(n.polygons);
       if(n.front)stack.push(n.front);
       if(n.back)stack.push(n.back);
@@ -504,56 +769,87 @@ class Bsp {
   }
   *buildG(polys){
     if(!polys.length)return;
+    this.boxOk=false;                      // 加了新的多邊形，盒子要重算
     const stack=[[this,polys]];
     let budget=YIELD_EVERY;
     while(stack.length){
       const [n,ps]=stack.pop();
       if(!ps.length)continue;
       if((budget-=ps.length)<=0){budget=YIELD_EVERY;yield;}
-      if(!n.plane)n.plane=ps[0].plane.clone();
-      const front=[],back=[];
-      for(const p of ps)n.plane.splitPolygon(p,n.polygons,n.polygons,front,back);
-      if(back.length){if(!n.back)n.back=new Bsp();stack.push([n.back,back]);}
-      if(front.length){if(!n.front)n.front=new Bsp();stack.push([n.front,front]);}
+      const fresh=!n.plane;
+      if(fresh){
+        const c=choosePlane(ps);
+        n.plane=c.plane.clone();n.aux=c.aux;
+      }
+      let front=[],back=[];
+      if(n.aux){
+        /* aux 平面不是實體的表面，所以共面的多邊形不能留在節點上，
+           要按朝向丟給某一邊，繼續當它們自己的表面用。 */
+        for(const p of ps)n.plane.splitPolygon(p,front,back,front,back);
+        /* 萬一切不開（全部都在同一邊，或全部被切成兩半），就退回用表面的
+           平面——那個至少會把共面的收進節點，一定有進展，不會無窮迴圈。 */
+        if(fresh&&(!front.length||!back.length||front.length+back.length>ps.length*2.2)){
+          n.plane=ps[0].plane.clone();n.aux=false;front=[];back=[];
+        }
+      }
+      if(!n.aux)for(const p of ps)n.plane.splitPolygon(p,n.polygons,n.polygons,front,back);
+      const fSt=n.aux?n.st:0, bSt=n.aux?n.st:1;
+      if(back.length){if(!n.back){n.back=new Bsp();n.back.st=bSt;}stack.push([n.back,back]);}
+      if(front.length){if(!n.front){n.front=new Bsp();n.front.st=fSt;}stack.push([n.front,front]);}
     }
   }
   clipPolygons(polys){return drain(this.clipPolygonsG(polys));}
   clipTo(bsp){return drain(this.clipToG(bsp));}
   build(polys){return drain(this.buildG(polys));}
-  allPolygons(){
+  allPolygons(){return drain(this.allPolygonsG());}
+  *allPolygonsG(){
     const out=[];
     const stack=[this];
+    let budget=YIELD_EVERY;
     while(stack.length){
       const n=stack.pop();
       for(const p of n.polygons)out.push(p);
       if(n.back)stack.push(n.back);
       if(n.front)stack.push(n.front);
+      if((budget-=n.polygons.length+1)<=0){budget=YIELD_EVERY;yield;}
     }
     return out;
   }
 }
+/* pa／pb 會被直接拿去用（建樹、invert 都會就地改動），呼叫端交出來之後
+   就不要再碰那兩個陣列了。以前這裡先整份 clone 一遍，但兩個呼叫端
+   （evalNodeG 的組合那段）給的都是當場算出來、用完即丟的多邊形，
+   那一份複製是白做的——幾十萬個物件的配置與回收，省下來很有感。 */
 function* csgG(pa,pb,op){
   const a=new Bsp(), b=new Bsp();
-  yield* a.buildG(pa.map(p=>p.clone()));
-  yield* b.buildG(pb.map(p=>p.clone()));
+  yield* a.buildG(pa);
+  yield* b.buildG(pb);
   if(op==='union'){
-    yield* a.clipToG(b); yield* b.clipToG(a); b.invert(); yield* b.clipToG(a); b.invert();
-    yield* a.buildG(b.allPolygons()); return a.allPolygons();
+    yield* a.clipToG(b); yield* b.clipToG(a); yield* b.invertG(); yield* b.clipToG(a); yield* b.invertG();
+    yield* a.buildG(yield* b.allPolygonsG()); return yield* a.allPolygonsG();
   }
   if(op==='subtract'){
-    a.invert(); yield* a.clipToG(b); yield* b.clipToG(a); b.invert(); yield* b.clipToG(a); b.invert();
-    yield* a.buildG(b.allPolygons()); a.invert(); return a.allPolygons();
+    yield* a.invertG(); yield* a.clipToG(b); yield* b.clipToG(a); yield* b.invertG(); yield* b.clipToG(a); yield* b.invertG();
+    yield* a.buildG(yield* b.allPolygonsG()); yield* a.invertG(); return yield* a.allPolygonsG();
   }
-  a.invert(); yield* b.clipToG(a); b.invert(); yield* a.clipToG(b); yield* b.clipToG(a);
-  yield* a.buildG(b.allPolygons()); a.invert(); return a.allPolygons();
+  yield* a.invertG(); yield* b.clipToG(a); yield* b.invertG(); yield* a.clipToG(b); yield* b.clipToG(a);
+  yield* a.buildG(yield* b.allPolygonsG()); yield* a.invertG(); return yield* a.allPolygonsG();
 }
 function csg(pa,pb,op){return drain(csgG(pa,pb,op));}
 /* 直接把矩陣套在多邊形上。
    以前是 polysToGeo → applyMatrix4 → geoToPolys 繞一圈，那會把多邊形
    全部切成三角形，還會在轉回來時丟掉退化的碎片，等於每包一層組合就
    累積一次誤差、破一次洞。直接搬頂點就沒有這個問題，也快得多。 */
-function transformPolys(polys,m){
+/* 這三個（transformPolys／geoToPolys／polysToGeo）也要切段。
+   BSP 那邊早就切了，但這三個是「一口氣跑完」的迴圈，而它們處理的量跟
+   面數成正比：實測 64k 面的組合，transformPolys 單獨一次就佔住主執行緒
+   1.07 秒、polysToGeo 0.58 秒、geoToPolys 0.55 秒。面數再上去就是好幾秒，
+   幾個最上層物件接在一起，瀏覽器就會跳「網頁沒有回應」——分段跑的意義
+   在於「沒有任何一次 next() 會很久」，漏掉一個就破功了。
+   同步版留著給匯出用（drain 一口氣跑完）。 */
+function* transformPolysG(polys,m){
   const out=[];
+  let budget=YIELD_EVERY;
   const t=new THREE.Vector3();
   /* 鏡像（行列式為負）會把三角形的正反面翻過來：頂點順序不動的話，
      Newell 算出來的法向量會指向實體內部，而朝內的面會被布林運算當成
@@ -568,33 +864,41 @@ function transformPolys(polys,m){
     const n=newellNormal(vs);
     if(!n)continue;                       // 真的壓成一條線了才丟掉
     out.push(new Poly(vs,new Plane(n,n.dot(vs[0].pos))));
+    if(--budget<=0){budget=YIELD_EVERY;yield;}
   }
   return out;
 }
-function geoToPolys(g){
+function transformPolys(polys,m){return drain(transformPolysG(polys,m));}
+function* geoToPolysG(g){
   const p=g.attributes.position, out=[];
+  let budget=YIELD_EVERY;
   for(let i=0;i<p.count;i+=3){
     const vs=[0,1,2].map(k=>new Vtx(new V(p.getX(i+k),p.getY(i+k),p.getZ(i+k))));
     const d1=vs[1].pos.minus(vs[0].pos), d2=vs[2].pos.minus(vs[0].pos);
     if(d1.cross(d2).dot(d1.cross(d2))<1e-20)continue;   // 丟掉退化三角形
     out.push(new Poly(vs));
+    if(--budget<=0){budget=YIELD_EVERY;yield;}
   }
   return out;
 }
-function polysToGeo(polys){
+function geoToPolys(g){return drain(geoToPolysG(g));}
+function* polysToGeoG(polys){
   const pos=[],nor=[];
+  let budget=YIELD_EVERY;
   for(const poly of polys){
     const n=poly.plane.normal;
     for(let i=2;i<poly.vertices.length;i++){
       const t=[poly.vertices[0],poly.vertices[i-1],poly.vertices[i]];
       for(const v of t){pos.push(v.pos.x,v.pos.y,v.pos.z);nor.push(n.x,n.y,n.z);}
     }
+    if(--budget<=0){budget=YIELD_EVERY;yield;}
   }
   const g=new THREE.BufferGeometry();
   g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
   g.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));
   return g;
 }
+function polysToGeo(polys){return drain(polysToGeoG(polys));}
 
 /* ============================================================
    2. 場景資料：一棵樹。組合不會吃掉原料，只是多一層節點。
@@ -844,7 +1148,7 @@ function* evalNodeG(n){
   if(n.kind==='shape'){
     const g=nonIndexed(baseGeo(n));
     applyNodeMatrix(g,matrixOf(n));
-    polys=geoToPolys(g);
+    polys=yield* geoToPolysG(g);
     g.dispose();
   } else if(n.kind==='mesh'){
     // 匯入的三角形存成「塞進 1×1×1 方框」的樣子，實際尺寸一樣靠 size 縮放，
@@ -852,9 +1156,8 @@ function* evalNodeG(n){
     const g=new THREE.BufferGeometry();
     g.setAttribute('position',new THREE.Float32BufferAttribute(Float32Array.from(n.tri),3));
     applyNodeMatrix(g,matrixOf(n));
-    polys=geoToPolys(g);
+    polys=yield* geoToPolysG(g);
     g.dispose();
-    yield;                       // 匯入的模型可能幾十萬個三角形，這裡先喘一口
   } else {
     let acc=null;
     for(const c of n.children){
@@ -868,7 +1171,7 @@ function* evalNodeG(n){
       if(!acc.length)break;
       acc=yield* csgG(acc,yield* evalNodeG(c),'subtract');
     }
-    polys=transformPolys(acc,matrixOf(n));
+    polys=yield* transformPolysG(acc,matrixOf(n));
   }
   return polys;
 }
@@ -876,7 +1179,7 @@ function evalNode(n){return drain(evalNodeG(n));}
 
 /* ------- 歷史（上一步 / 下一步） ------- */
 function snapshot(){return JSON.stringify({roots,uid});}
-function pushUndo(){undoStack.push(snapshot());if(undoStack.length>60)undoStack.shift();redoStack.length=0;}
+function pushUndo(){dirty=true;undoStack.push(snapshot());if(undoStack.length>60)undoStack.shift();redoStack.length=0;}
 function restore(s){const d=JSON.parse(s);roots=d.roots;uid=d.uid;
   selected=selected.filter(id=>roots.some(r=>r.id===id));rebuild();}
 function undo(){if(!undoStack.length)return;redoStack.push(snapshot());restore(undoStack.pop());}
@@ -896,15 +1199,40 @@ view.appendChild(renderer.domElement);
 scene.add(new THREE.HemisphereLight(0xfffaf0,0xbfb9a8,1.0));
 const dir=new THREE.DirectionalLight(0xffffff,.5);dir.position.set(60,110,80);scene.add(dir);
 
-const grid=new THREE.GridHelper(400,40,0xa9a08a,0xd6cdb6);
-grid.material.transparent=true;grid.material.opacity=.75;scene.add(grid);
+/* 格線的一格 = 目前的吸附格距（SNAP）。格距很小的時候畫滿 400mm 會變成
+   幾千條線，糊成一片又慢，所以線太多就退回 10mm 的格線，只有吸附變細——
+   看得懂比較重要。 */
+/* 地板（格線＋玻璃）永遠在最先畫，模型疊在它上面。
+
+   這件事本來是靠「加進場景的順序」自然成立的，但半透明的物件改成自己算
+   距離、寫進 renderOrder 之後就破功了：模型拿到的是負幾百，格線和玻璃還
+   停在 0，排序時反而排到最後——**格線就被畫在半透明的模型上面**，看起來
+   像格線穿透模型浮在前面。使用者回報「透明的時候格線特別清楚」就是這個。
+   所以地板要明確寫一個比誰都小的號碼。
+
+   玻璃排在格線後面一格（也就是蓋在格線上），這是刻意的：格線隔著那層膜
+   看就淡了，不會跟模型搶。位置也跟著抬到格線上方，免得兩張平面互相閃爍。
+   代價是**半透明物件沉到平面下方的部分不再透出藍色**（它畫在玻璃之後），
+   不透明的物件不受影響——那條路是先畫完所有不透明的才輪到玻璃。 */
+const FLOOR_ORDER=-1e6;
+let grid=null;
+function makeGrid(cell){
+  const c=(400/cell>200)?10:cell;
+  if(grid){scene.remove(grid);grid.geometry.dispose();grid.material.dispose();}
+  grid=new THREE.GridHelper(400,Math.round(400/c),0xa9a08a,0xd6cdb6);
+  grid.material.transparent=true;grid.material.opacity=.75;
+  grid.renderOrder=FLOOR_ORDER;                    // 地板永遠先畫（見下）
+  scene.add(grid);
+}
+makeGrid(1);
 
 /* 工作平面的「有色玻璃」。匯出 SVG 切的就是這一層，所以要看得出物件
    有沒有穿過去、穿到哪裡。
    - 不寫深度（depthWrite=false）：玻璃只上色、不擋住後面的東西的深度，
      所以沉在平面下方的部分會透出藍色，浮在上方的部分維持原色——一眼就
      看得出剖面切在哪。
-   - 壓在格線下面一點點（-0.02），不然會跟格線互相閃爍（z-fighting）。
+   - 蓋在格線上面一點點（+0.02）：格線隔著這層膜看就淡了，不會跟模型搶。
+     差那 0.02 是為了不跟格線互相閃爍（z-fighting）。
    - 用 MeshBasicMaterial（不吃光）：吃光的話會隨角度忽明忽暗，看起來像
      另一個實體，反而不像玻璃。
    - 沒有加進 meshes／handles，所以點不到它，不會干擾選取。 */
@@ -912,7 +1240,9 @@ const glass=new THREE.Mesh(
   new THREE.PlaneGeometry(400,400),
   new THREE.MeshBasicMaterial({color:0x2f9fd0,transparent:true,opacity:.22,
                                side:THREE.DoubleSide,depthWrite:false}));
-glass.rotation.x=-Math.PI/2;glass.position.y=-0.02;scene.add(glass);
+glass.rotation.x=-Math.PI/2;glass.position.y=0.02;
+glass.renderOrder=FLOOR_ORDER+1;                   // 蓋在格線上，把格線壓淡
+scene.add(glass);
 
 const objLayer=new THREE.Group();scene.add(objLayer);
 const helpLayer=new THREE.Group();scene.add(helpLayer);
@@ -937,15 +1267,29 @@ for(const sx of [-1,0,1])for(const sz of [-1,0,1]){
   m.userData={sx,sz,sy:0,axes:corner?'xz':(sx?'x':'z')};
   m.visible=false;helpLayer.add(m);handles.push(m);
 }
-// 旋轉圓弧：三個軸各一圈
+/* 旋轉把手：三個軸各一圈。
+   以前三圈同心疊在物件中心，互相交叉——分不清誰是誰，想點某一圈常常點到另一圈。
+   現在三圈拆開站到物件外面（見 placeRings）。
+   曾經改成只畫四分之一段弧，畫面確實更乾淨，但看起來不像「可以繞著轉」的東西，
+   專案擁有者看過之後決定改回完整的圈。位置照樣是拆開的，該解決的問題已經解決。
+   位置和大小都由 placeRings 決定，拖曳中一律不動。 */
+const geoRing=new THREE.TorusGeometry(1,.028,8,72);    // 細的不好點，粗一點
 const rings=[];
 [['x',0xd98f99],['y',0x9cc48a],['z',0x8fb4d6]].forEach(([ax,col])=>{
-  const m=new THREE.Mesh(new THREE.TorusGeometry(1,.022,8,72),
-    new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.55}));
-  if(ax==='x')m.rotation.y=Math.PI/2;
-  if(ax==='y')m.rotation.x=Math.PI/2;
+  const m=new THREE.Mesh(geoRing,
+    new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.75}));
   m.userData={axis:ax};m.visible=false;helpLayer.add(m);rings.push(m);
 });
+/* 拖著某一圈轉的時候，另外兩圈先收起來，免得跟正在轉的那一圈混在一起。
+   那一圈本身留在原地不要動——曾經做成搬回物件中心（想說順便講明「轉的是這個
+   中心」），但按下去的瞬間環就跳走，手還按在原處環卻不在那裡了，
+   專案擁有者看過之後否決。 */
+function soloRing(ax){
+  for(const r of rings)r.visible=(r.userData.axis===ax);
+}
+function showRings(){
+  for(const r of rings)r.visible=selected.length>0;
+}
 
 const topHandle=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),matTop);
 topHandle.userData={sx:0,sz:0,sy:1,axes:'y'};
@@ -960,6 +1304,10 @@ function updateCam(){
     target.y+sph.r*Math.cos(sph.phi),
     target.z+sph.r*Math.sin(sph.phi)*Math.cos(sph.theta));
   camera.lookAt(target);
+  /* 三段旋轉弧要站在「面對鏡頭」的那一側，所以轉視角時得重新擺一次。
+     正在轉物件（弧已經展開成整圈）時不要動它。 */
+  if(ringBox&&mode!=='rotate')
+    placeRings(ringBox,ringBox.getCenter(new THREE.Vector3()),Math.max(1.6,sph.r*0.019));
 }
 function resize(){
   const w=view.clientWidth,h=view.clientHeight;
@@ -1022,7 +1370,9 @@ function kindKey(n){
   // 不整包 stringify（幾十萬個數字），改用長度＋幾個取樣點。
   // 光靠 id 不夠：換一個檔案可能出現相同編號卻是不同模型。
   const t=n.tri,L=t.length;
-  return `m${L}.${t[0]},${t[L>>1]},${t[L-1]}`;
+  // 文字重新編輯過之後三角形數量可能剛好一樣（「AB」改成「BA」），
+  // 光看長度和取樣點會認錯、畫面不更新，所以帶上「改過第幾次」。
+  return `m${L}.${t[0]},${t[L>>1]},${t[L-1]}`+(n.gen?'#'+n.gen:'');
 }
 function subKey(n){
   return kindKey(n)+`|${n.pos}|${n.rot}|${n.size}|${n.post||''}|${n.role}`+
@@ -1077,7 +1427,7 @@ function* geoForRootG(n){
     return geo;
   }
   let geo,ok=true;
-  try{ geo=polysToGeo(yield* evalNodeG(n)); }
+  try{ geo=yield* polysToGeoG(yield* evalNodeG(n)); }
   catch(e){ console.warn(e); geo=new THREE.BufferGeometry(); buildFail++; ok=false; }
   if(ok){                       // 算失敗的不要進快取，否則永遠不會再試一次
     if(c)c.geo.dispose();
@@ -1087,14 +1437,137 @@ function* geoForRootG(n){
   }
   return geo;
 }
+/* ---- 「先看到東西」的預覽層 ----
+   剛開網頁或剛開檔時，畫面是空的，而慢的一直都是布林運算那一步。所以先把
+   每個零件「原本的樣子」直接畫出來——方塊就是方塊、匯入的 STL 就是那個
+   STL，完全不做加減，只套一次矩陣，幾乎是瞬間的事。還在等布林運算的東西
+   用線框（面太多就改半透明，線框畫幾十萬條線反而卡）表示「還沒算好」，
+   算完一個就換上一個真的。
+
+   預覽放在自己的 previewLayer，不加進 meshes／handles，所以點不到也框不到
+   ——「還沒算好的東西不能碰」就是靠這個（跟工作平面那層玻璃、鬼影同樣的
+   做法）。previewLayer 不影響 rebuildG 判斷「畫面上有沒有東西」，那看的是
+   objLayer。 */
+const previewLayer=new THREE.Group();scene.add(previewLayer);
+const previews=new Map();               // 最上層節點 id → 那一團預覽
+const PREVIEW_WIRE_MAX=2000;            /* 超過這個面數就不畫線框，改成很淡的
+   半透明。線框在密的模型上會糊成灰灰的一團，比實體還難看懂——方塊圓柱這種
+   低面數的零件畫線框才看得出「這是骨架、還沒算好」。 */
+function disposeTree(o){
+  o.traverse(c=>{if(c.geometry)c.geometry.dispose();disposeMat(c.material);});
+}
+function previewClear(){
+  for(const o of previews.values()){previewLayer.remove(o);disposeTree(o);}
+  previews.clear();
+}
+function dropPreview(id){
+  const o=previews.get(id);
+  if(!o)return;
+  previewLayer.remove(o);disposeTree(o);previews.delete(id);
+}
+/* 把一個節點底下的零件原樣攤成一堆 mesh。組合就一路往下走，把矩陣乘進去，
+   不做任何布林運算——這裡的重點就是「不算」。 */
+function* previewPartsG(n,M,grp){
+  const m=new THREE.Matrix4().multiplyMatrices(M,matrixOf(n));
+  if(n.kind==='group'){
+    for(const c of n.children||[])yield* previewPartsG(c,m,grp);
+    return;
+  }
+  let g;
+  if(n.kind==='mesh'){
+    g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.Float32BufferAttribute(Float32Array.from(n.tri),3));
+  }else{
+    g=nonIndexed(baseGeo(n)).clone();
+  }
+  g.applyMatrix4(m);
+  const faces=g.getAttribute('position').count/3;
+  const hole=n.role==='hole';
+  const mat=faces<=PREVIEW_WIRE_MAX
+    ? new THREE.MeshBasicMaterial({color:hole?0xe8657f:0x7d8ea6,wireframe:true,
+        transparent:true,opacity:.55,depthWrite:false})
+    : new THREE.MeshBasicMaterial({color:hole?0xe8657f:0x8b9bb0,
+        transparent:true,opacity:.28,depthWrite:false,side:THREE.DoubleSide});
+  grp.add(new THREE.Mesh(g,mat));
+  yield;
+}
+function* showPreviewsG(){
+  previewClear();
+  for(const n of roots){
+    if(n.hide)continue;                  // 藏起來的連骨架都不必畫
+    const grp=new THREE.Group();
+    try{ yield* previewPartsG(n,new THREE.Matrix4(),grp); }
+    catch(e){ console.warn(e); }
+    if(grp.children.length){previewLayer.add(grp);previews.set(n.id,grp);}
+  }
+}
+// 透明度：節點上沒有這個欄位就是完全不透明。下限留 0.05，
+// 全透明的東西看不見卻還點得到，使用者會以為東西不見了
+function clampOpa(v){ return v==null?1:Math.max(.05,Math.min(1,v)); }
+let lastOpa=.5;   // 關掉透明之後再打開，回到上一次拉到的濃淡
+/* 半透明的畫法：一張平均的半透明皮看起來是一團糊的，因為朝著你的那一面
+   和背後那一面用同樣的濃度疊在一起，形狀就消失了。所以拆成兩層畫：
+   先畫背面（暗一點、淡一點＝「這是後面的牆」），再畫正面（亮＝「這是朝著
+   你的表面」）。再加上邊緣越斜越濃（菲涅耳），輪廓就回來了——球和圓柱這種
+   沒有稜線的形狀特別靠這個，不然透明之後根本看不出是顆球。
+   兩層是同一個幾何體切成兩個 group，只是各用一個材質，不多一份三角形。 */
+/* 正面那一層：面對著你的地方原本被壓到很淡（0.55 倍），看起來像沒有東西，
+   使用者回報「表面像全透明」。所以正面的底色拉到 0.85 倍——**要看得出這裡
+   有一片有顏色的殼**，只是看得穿。再加一道假的高光：亮的地方（Phong 的
+   specular 打到的那一塊）連透明度一起加上去，玻璃之所以看起來是玻璃就靠
+   那一抹反光，只調濃淡是做不出來的。 */
+const XRAY_FRONT=sh=>{
+  sh.fragmentShader=sh.fragmentShader.replace('#include <dithering_fragment>',
+    `#include <dithering_fragment>
+     float fres = pow( 1.0 - abs( dot( normalize( vNormal ),
+                                       normalize( vViewPosition ) ) ), 2.0 );
+     float lum  = dot( gl_FragColor.rgb, vec3( 0.299, 0.587, 0.114 ) );
+     float hi   = smoothstep( 0.60, 1.0, lum );          // 反光的那一塊
+     float a    = gl_FragColor.a;
+     gl_FragColor.a = clamp( mix( a * 0.85, a + ( 1.0 - a ) * 0.38, fres )
+                             + hi * 0.25, 0.0, 0.80 );`);
+};
+/* 背面那一層：它的任務只是「這是後面的牆」，所以維持暗、淡、不上高光，
+   免得前後兩層一樣搶眼，又變回分不出遠近的一團。 */
+const XRAY_BACK=sh=>{
+  sh.fragmentShader=sh.fragmentShader.replace('#include <dithering_fragment>',
+    `#include <dithering_fragment>
+     float fres = pow( 1.0 - abs( dot( normalize( vNormal ),
+                                       normalize( vViewPosition ) ) ), 2.0 );
+     float a    = gl_FragColor.a;
+     gl_FragColor.a = clamp( mix( a * 0.50, a + ( 1.0 - a ) * 0.22, fres ), 0.0, 0.55 );`);
+};
+function xrayMat(col,op,side,dim,front){
+  const m=new THREE.MeshPhongMaterial({
+    color:col.clone().multiplyScalar(dim),
+    // 場上的幾何體是平面著色（每個面一個法向量），高光太集中會變成一塊一塊
+    // 的白斑，所以 shininess 壓低讓它散開
+    specular:front?0x5a5a5a:0x000000, shininess:front?14:0,
+    transparent:true,opacity:op,depthWrite:false,side});
+  m.onBeforeCompile=front?XRAY_FRONT:XRAY_BACK;
+  m.customProgramCacheKey=()=>front?'xrayF':'xrayB';  // 補過的 shader 要分開快取
+  return m;
+}
+function disposeMat(m){
+  if(Array.isArray(m))m.forEach(x=>x.dispose()); else if(m)m.dispose();
+}
 function addMesh(n,geo){
   const isHole=n.role==='hole';
-  const mat=new THREE.MeshLambertMaterial({
-    color:isHole?0xe8657f:new THREE.Color(n.color||'#5b8dd6'),
-    transparent:isHole,opacity:isHole?.32:1,
-    depthWrite:!isHole,side:THREE.DoubleSide});
+  // 孔洞本來就有自己的半透明畫法，使用者設的透明度只管實體
+  const op=isHole?.32:clampOpa(n.opa);
+  const base=new THREE.Color(isHole?0xe8657f:(n.color||'#5b8dd6'));
+  let mat;
+  if(op>=1){
+    mat=new THREE.MeshLambertMaterial({color:base,side:THREE.DoubleSide});
+  }else{
+    const cnt=geo.getAttribute('position').count;
+    geo.clearGroups();geo.addGroup(0,cnt,0);geo.addGroup(0,cnt,1);
+    mat=[xrayMat(base,op*.35,THREE.BackSide,.55,false), // 先畫：背後那一面
+         xrayMat(base,op,THREE.FrontSide,1,true)];      // 後畫：朝著你的那一面
+  }
   const mesh=new THREE.Mesh(geo,mat);
   mesh.userData.id=n.id;
+  mesh.visible=!n.hide;          // 藏起來只是不畫，幾何體照樣算好放著
   objLayer.add(mesh);meshes.push(mesh);
 }
 /* 兩種上場方式：
@@ -1109,12 +1582,15 @@ function* rebuildG(my){
   const stream=objLayer.children.length===0;
   const built=[];
   my.built=stream?null:built;
-  if(stream){meshes.length=0;drawTree();}   // 清單先出來，讓人知道要等什麼
+  if(stream){
+    meshes.length=0;drawTree();            // 清單先出來，讓人知道要等什麼
+    yield* showPreviewsG();                // 零件原樣先畫出來，馬上有東西可以轉
+  }
   for(let i=0;i<roots.length;i++){
     const n=roots[i];
     my.stage=roots.length>1?`計算中 ${i+1}/${roots.length}`:'計算中';
     const geo=yield* geoForRootG(n);
-    if(stream)addMesh(n,geo);
+    if(stream){addMesh(n,geo);dropPreview(n.id);}   // 算好的換掉自己那一團預覽
     else built.push({n,geo});
     yield;
   }
@@ -1126,11 +1602,12 @@ function* rebuildG(my){
     // 算完了才換上去
     my.built=null;
     while(objLayer.children.length){
-      const m=objLayer.children.pop();m.geometry.dispose();m.material.dispose();
+      const m=objLayer.children.pop();m.geometry.dispose();disposeMat(m.material);
     }
     meshes.length=0;
     for(const {n,geo} of built)addMesh(n,geo);
   }
+  previewClear();
   drawTree();drawInspector();updateHandles();autosave();
   let tris=0;
   for(const m of meshes){
@@ -1175,7 +1652,7 @@ function startJob(makeIt,label,onDone){
   soon(step);
 }
 function rebuild(){
-  ghostClear();
+  ghostClear();previewClear();
   startJob(my=>rebuildG(my),'計算中',(tris,ms)=>updateGauge(tris,ms));
 }
 function cancelJob(){
@@ -1184,6 +1661,7 @@ function cancelJob(){
   document.getElementById('busy').style.display='none';
   const note=document.getElementById('gNote');
   note.textContent='已取消，畫面還是上一次的結果';
+  note.className='note';           // 蓋掉可能留著的 calm
   note.style.display='block';
 }
 function selectedMeshes(){return meshes.filter(m=>selected.includes(m.userData.id));}
@@ -1206,8 +1684,40 @@ function placeHandles(b){
       d.sy? c.z : c.z+d.sz*(b.max.z-b.min.z)/2);
     h.scale.setScalar(s);h.visible=true;
   }
-  const R=Math.max(b.getSize(new THREE.Vector3()).length()*.62,s*4);
-  for(const r of rings){r.position.copy(c);r.scale.setScalar(R);r.visible=true;}
+  ringBox=b.clone();placeRings(b,c,s);
+}
+/* 三圈拆開站在物件外面，但轉的中心仍然是物件自己的中心（東西是原地轉的）。
+   平躺那一圈放「底部」：正上方已經有藍色的高度把手，放上面會疊在一起，
+   放底下還剛好像個轉盤圍著底座。立起來的兩圈推到「離鏡頭遠」的那一側，
+   免得擋在物件前面；圈圈比那一面的外接圓大一圈，所以還是繞得出來、點得到。
+   位置跟視角有關，所以轉視角時要重算（updateCam），但那時不要重量包圍盒
+   ——量一次要走過所有三角形，大模型每一格都量會頓，所以留著 ringBox。 */
+let ringBox=null;
+function placeRings(b,c,s){
+  const sz=b.getSize(new THREE.Vector3());
+  /* 半徑一律比那一面的外接圓再大一點（gap），圈圈才會繞在輪廓外面而不是趴在
+     表面上；貼著面的那個方向只推開一點點（off），推太遠會像跟物件脫節。 */
+  const gap=s*2.2,off=s*1.2;
+  const rad=(u,v)=>Math.max(Math.hypot(u,v)/2,s*3)+gap;
+  for(const r of rings){
+    const ax=r.userData.axis;
+    let R,p;
+    if(ax==='y'){                       // 水平轉：底部一圈，半徑要繞得過角落的把手
+      R=rad(sz.x,sz.z);p=new THREE.Vector3(c.x,b.min.y,c.z);
+    }else if(ax==='x'){                 // 立著：左邊或右邊，挑「離鏡頭遠」的那一側
+      R=rad(sz.y,sz.z);
+      p=new THREE.Vector3(camera.position.x>=c.x?b.min.x-off:b.max.x+off,c.y,c.z);
+    }else{                              // 立著：前面或後面，同樣挑遠的那一側
+      R=rad(sz.x,sz.y);
+      p=new THREE.Vector3(c.x,c.y,camera.position.z>=c.z?b.min.z-off:b.max.z+off);
+    }
+    r.geometry=geoRing;r.position.copy(p);r.scale.setScalar(R);
+    r.rotation.set(0,0,0);
+    if(ax==='x')r.rotation.y=Math.PI/2;
+    if(ax==='y')r.rotation.x=Math.PI/2;
+    r.updateMatrixWorld(true);
+    r.visible=true;
+  }
 }
 function updateHandles(){
   const b=selBox();
@@ -1215,6 +1725,7 @@ function updateHandles(){
     boxHelper.visible=yHandle.visible=false;
     for(const h of handles)h.visible=false;
     for(const r of rings)r.visible=false;
+    ringBox=null;                       // 不然轉視角時 updateCam 會把弧又擺回來
     hideDim();setDimBox(null);return;
   }
   boxHelper.box.copy(b);boxHelper.visible=true;
@@ -1360,7 +1871,14 @@ function dragCopy(n){
   return {pos:n.pos.slice(),rot:n.rot.slice(),size:n.size.slice(),
           post:n.post?n.post.slice():undefined};
 }
-const SNAP=1;
+let SNAP=1;
+/* 拖曳算出來的數字四捨五入到第幾位，要跟著格距走：格距 1mm 以上留一位小數
+   就夠了，0.25／0.1 這種細格留三位，不然剛吸附好的位置馬上又被捨掉。 */
+function q(v){const d=SNAP>=1?10:1000;return Math.round(v*d)/d;}
+const snapSel=document.getElementById('snapSel');
+if(snapSel)snapSel.addEventListener('change',()=>{
+  SNAP=parseFloat(snapSel.value)||1;makeGrid(SNAP);
+});
 function setPtr(e){
   const r=renderer.domElement.getBoundingClientRect();
   ptr.x=((e.clientX-r.left)/r.width)*2-1;
@@ -1416,6 +1934,7 @@ function applyMarquee(x,y){
   const hit=[];
   if(a.x1-a.x0>=3||a.y1-a.y0>=3){
     for(const m of meshes){
+      if(!m.visible)continue;            // 藏起來的框選也框不到
       const b=screenRectOf(m);
       if(!b)continue;
       if(b.x0<=a.x1&&b.x1>=a.x0&&b.y0<=a.y1&&b.y1>=a.y0)hit.push(m.userData.id);
@@ -1462,6 +1981,7 @@ renderer.domElement.addEventListener('pointerdown',e=>{
       const p=ray.ray.intersectPlane(pl,new THREE.Vector3());
       if(!p)return;
       mode='rotate';
+      soloRing(ax);                       // 另外兩圈先收起來，這一圈留在原地
       start={axis:ax,c,nrm,plane:pl,a0:angleOn(ax,p,c)};
       return;
     }
@@ -1479,7 +1999,7 @@ renderer.domElement.addEventListener('pointerdown',e=>{
     };
     mode='scaleH';return;
   }
-  const hits=ray.intersectObjects(meshes);
+  const hits=ray.intersectObjects(meshes.filter(m=>m.visible));  // 看不見的就點不到
   if(hits.length){
     const id=hits[0].object.userData.id;
     if(e.shiftKey){ selected.includes(id)?selected=selected.filter(s=>s!==id):selected.push(id); }
@@ -1638,13 +2158,13 @@ addEventListener('pointermove',e=>{
         if(F[k]===1)continue;
         if(aligned){
           const j=map[k];               // 倍率要套在自身的第 j 格，不是第 k 格
-          n.size[j]=Math.max(.5,Math.round(s0.size[j]*F[k]*10)/10);
+          n.size[j]=Math.max(Math.min(.5,SNAP),q(s0.size[j]*F[k]));
         }else{
           // 轉斜了：把倍率直接記成世界方向的拉伸，拉哪邊就往哪邊變形
           n.post[k]=Math.max(.02,Math.min(50,
             Math.round((s0.post?s0.post[k]:1)*F[k]*1e4)/1e4));
         }
-        n.pos[k]=Math.round((anchor[k]+(s0.pos[k]-anchor[k])*F[k])*10)/10;
+        n.pos[k]=q(anchor[k]+(s0.pos[k]-anchor[k])*F[k]);
       }
     });
     liveScale(F,anchor);return;
@@ -1684,6 +2204,7 @@ function surfaceUnder(box,ignore){
   const zs=[box.min.z+iz,(box.min.z+box.max.z)/2,box.max.z-iz];
   const top=box.max.y+1000;
   for(const m of meshes){
+    if(!m.visible)continue;                     // 藏起來的不能當桌面
     if(ignore.includes(m.userData.id))continue;
     const n=findNode(m.userData.id);
     if(!n||n.role==='hole')continue;            // 孔洞不是表面
@@ -1784,6 +2305,7 @@ addEventListener('pointerup',e=>{
   }
   if(mode==='move'||mode==='moveY'||mode==='scaleH'||mode==='rotate'){
     hideDim();
+    if(mode==='rotate')showRings();       // 另外兩圈回來
     /* 這裡不要清掉拖曳時的預覽位移。重算現在是分段跑的，中間隔著好幾十毫秒，
        先清掉的話畫面會先把物件彈回原位、等新幾何體算好才跳過去——看起來就是
        「放開時閃一下跳回去」。留著預覽，等 rebuildG 換上新的 mesh 那一瞬間
@@ -1813,6 +2335,8 @@ renderer.domElement.addEventListener('wheel',e=>{
    5. 面板
    ============================================================ */
 function nodeLabel(n){
+  // 暫存空間不夠時被拿掉三角形的匯入模型，現在只是一個佔位的空框
+  if(n.lost)return '⚠ '+(n.name||'匯入')+'（要重匯）';
   if(n.name)return n.name;
   if(n.kind==='group')return '組合';
   if(n.kind==='mesh')return '匯入';
@@ -1851,25 +2375,77 @@ function faceCount(n){
 function faceText(v){
   return v>=10000?(v/1000).toFixed(0)+'k':v>=1000?(v/1000).toFixed(1)+'k':String(v|0);
 }
+/* ---- 藏起來／叫回來 ----
+   純粹是視覺開關：幾何體、布林運算、匯出全部照舊，只是那個 mesh 不畫。
+   所以完全不必 rebuild()，再大的模型也是一瞬間。
+
+   會進 undo（Ctrl+Z 退得回來），也會存進檔案和暫存——不然關掉重開之後
+   東西還藏著卻沒人記得是誰藏的。
+
+   「哪些東西現在是關的」不可以只留在使用者腦袋裡：物件樹上藏起來的那一列
+   會變淡、燈泡一直亮著，樹的最上面還釘一條「藏起來 N 個 ＋ 全部顯示」。
+   步驟一多才不會找不到東西又想不起來自己關過什麼。 */
+function toggleHide(ids){
+  const list=ids.map(id=>findNode(id)).filter(Boolean);
+  if(!list.length)return;
+  const on=list.some(n=>!n.hide);      // 有任何一個還看得見，就整批藏起來
+  pushUndo();
+  for(const n of list){
+    if(on)n.hide=true; else delete n.hide;
+    const m=meshes.find(x=>x.userData.id===n.id);
+    if(m)m.visible=!n.hide;
+  }
+  if(on)selected=selected.filter(id=>!ids.includes(id));   // 看不見的東西不留在選取裡
+  drawTree();drawInspector();updateHandles();autosave();
+}
+function showAllNodes(){
+  if(!roots.some(n=>n.hide))return;
+  pushUndo();
+  for(const n of roots){
+    delete n.hide;
+    const m=meshes.find(x=>x.userData.id===n.id);
+    if(m)m.visible=true;
+  }
+  drawTree();drawInspector();updateHandles();autosave();
+}
+/* 「藏起來 N 個 ＋ 全部顯示」那一條。元素一直在，只切 display，
+   所以它出現或消失都不會把上面的清單推來推去。 */
+function updateHidBar(){
+  const bar=document.getElementById('hidBar');
+  if(!bar)return;
+  const hid=roots.filter(n=>n.hide).length;
+  bar.style.display=hid?'flex':'none';
+  if(hid)document.getElementById('hidTxt').textContent=`🌑 藏起來 ${hid} 個`;
+}
+// 這顆按鈕現在是常駐的元素，接一次就好
+(function(){const b=document.getElementById('showAll');if(b)b.onclick=()=>showAllNodes();})();
 function drawTree(){
   const host=document.getElementById('treeBody');
-  if(!roots.length){host.innerHTML='<div class="empty">還沒有東西。上面加一個形狀。</div>';return;}
+  if(!roots.length){host.innerHTML='<div class="empty">還沒有東西。上面加一個形狀。</div>';
+    updateHidBar();return;}
   const render=(list,rootId)=>{
     let h='';
     for(const n of list){
       const rid=rootId||n.id;
-      const col=n.role==='hole'?'var(--hole)':(n.kind==='group'?'#9aa7b8':n.color);
-      h+=`<div class="node ${selected.includes(n.id)?'sel':''}" data-root="${rid}">
+      const col=n.role==='hole'?'var(--hole)':(n.color||(n.kind==='group'?'#9aa7b8':n.color));
+      const off=rootId?false:!!n.hide;   // 只有最上層藏得起來（場上一個物件就是一個 mesh）
+      h+=`<div class="node ${selected.includes(n.id)?'sel':''} ${off?'off':''}" data-root="${rid}">
             <span class="dot" style="background:${col}"></span>
             <span>${nodeLabel(n)} #${n.id}</span>
             <span class="rl">${n.role==='hole'?'孔洞':''}</span>
             <span class="fc">${faceText(faceCount(n))} 面</span>
+            ${rootId?'':`<button class="hb" data-hide="${n.id}" title="${off?'顯示（Ctrl+H）':'藏起來（Ctrl+H）'}">${off?'🌑':'💡'}</button>`}
           </div>`;
       if(n.kind==='group')h+=`<div class="kids">${render(n.children,rid)}</div>`;
     }
     return h;
   };
   host.innerHTML=render(roots,null);
+  updateHidBar();
+  host.querySelectorAll('.hb').forEach(b=>b.onclick=ev=>{
+    ev.stopPropagation();                       // 按燈泡不要順便選到那一列
+    toggleHide([+b.dataset.hide]);
+  });
   host.querySelectorAll('.node').forEach(el=>el.onclick=ev=>{
     const id=+el.dataset.root;
     if(ev.shiftKey){selected.includes(id)?selected=selected.filter(s=>s!==id):selected.push(id);}
@@ -2038,8 +2614,9 @@ function drawInspector(){
     return;
   }
   const n=findNode(selected[0]);
-  const num=(lbl,val,path,i)=>`<div class="row"><label>${lbl}</label>
-    <input type="number" step="1" value="${val}" data-p="${path}" data-i="${i}"></div>`;
+  // 九宮格裡的一格：沒有自己的 label，欄名靠最上面那排、組名靠左邊那欄
+  const cell=(val,path,i)=>
+    `<input type="number" step="1" value="${val}" data-p="${path}" data-i="${i}">`;
   host.innerHTML=`
     <div class="row" style="margin-bottom:10px">
       <input type="text" id="nm" placeholder="元件名稱（選填）" value="${n.name||''}"
@@ -2050,12 +2627,15 @@ function drawInspector(){
       <button data-role="solid" class="${n.role==='solid'?'on':''}">實體</button>
       <button data-role="hole" class="${n.role==='hole'?'on hole':''}">孔洞</button>
     </div>
-    <h2>尺寸 mm</h2>
-    ${num('X',n.size[0],'size',0)}${num('Y',n.size[1],'size',1)}${num('Z',n.size[2],'size',2)}
-    <div class="grp"><h2>位置 mm</h2></div>
-    ${num('X',n.pos[0],'pos',0)}${num('Y',n.pos[1],'pos',1)}${num('Z',n.pos[2],'pos',2)}
-    <div class="grp"><h2>旋轉 度</h2></div>
-    ${num('X',n.rot[0],'rot',0)}${num('Y',n.rot[1],'rot',1)}${num('Z',n.rot[2],'rot',2)}
+    <div class="g9">
+      <span></span><span class="hd">X</span><span class="hd">Y</span><span class="hd">Z</span>
+      <span class="rl">尺寸<small>mm</small></span>
+      ${cell(n.size[0],'size',0)}${cell(n.size[1],'size',1)}${cell(n.size[2],'size',2)}
+      <span class="rl">位置<small>mm</small></span>
+      ${cell(n.pos[0],'pos',0)}${cell(n.pos[1],'pos',1)}${cell(n.pos[2],'pos',2)}
+      <span class="rl">旋轉<small>度</small></span>
+      ${cell(n.rot[0],'rot',0)}${cell(n.rot[1],'rot',1)}${cell(n.rot[2],'rot',2)}
+    </div>
     ${n.shape==='box'?`<div class="grp"><h2>圓角 mm（0 就是直角）</h2></div>
       <div class="row"><label>R</label>
       <input type="number" step="0.5" min="0" id="rad" value="${n.r||0}"></div>`:''}
@@ -2065,8 +2645,21 @@ function drawInspector(){
     ${n.shape==='prism'?`<div class="grp"><h2>幾邊形</h2></div>
       <div class="row"><label>N</label>
       <input type="number" step="1" min="3" max="24" id="sides" value="${prismSides(n)}"></div>`:''}
-    ${n.kind!=='group'?`<div class="grp"><h2>顏色</h2></div>
-      <input type="color" value="${n.color}" id="col">`:''}
+    ${n.txt?`<div class="grp"><h2>文字</h2></div>
+      <button id="edTxt" style="width:100%">編輯文字…</button>`:''}
+    <div class="grp"><h2>顏色</h2></div>
+    <input type="color" value="${n.color||'#5b8dd6'}" id="col">
+    ${n.role==='hole'?'':`
+    <div class="seg" style="margin-top:8px">
+      <button data-opa="0" class="${n.opa==null?'on':''}">不透明</button>
+      <button data-opa="1" class="${n.opa==null?'':'on'}">透明</button>
+    </div>
+    <div class="row" id="opaRow" ${n.opa==null?'hidden':''}>
+      <input type="range" id="opa" min="5" max="95" step="5"
+             value="${Math.round((1-(n.opa==null?lastOpa:clampOpa(n.opa)))*100)}" style="flex:1">
+      <span id="opaV" style="width:34px;text-align:right;color:var(--dim)"
+        >${Math.round((1-(n.opa==null?lastOpa:clampOpa(n.opa)))*100)}%</span>
+    </div>`}
     <div class="grp"><h2>鏡像（繞自己的中心翻）</h2></div>
     <div class="seg">
       <button data-mir="x">左右</button>
@@ -2099,6 +2692,8 @@ function drawInspector(){
   if(sides)sides.onchange=()=>{pushUndo();
     n.sides=Math.max(3,Math.min(24,Math.round(parseFloat(sides.value)||6)));
     rebuild();drawTree();};
+  const edt=document.getElementById('edTxt');
+  if(edt)edt.onclick=()=>editText(n);
   const nm=document.getElementById('nm');
   if(nm)nm.onchange=()=>{pushUndo();
     const v=nm.value.trim();
@@ -2108,6 +2703,31 @@ function drawInspector(){
     pushUndo();n.role=b.dataset.role;rebuild();});
   const col=document.getElementById('col');
   if(col)col.onchange=()=>{pushUndo();n.color=col.value;rebuild();};
+  const opa=document.getElementById('opa'),opaV=document.getElementById('opaV');
+  if(opa){
+    // 改透明度只換材質，不必重算 CSG，所以拖的過程畫面就即時跟著變
+    const paint=()=>{
+      const m=meshes.find(x=>x.userData.id===n.id);
+      if(!m||n.role==='hole')return;         // 孔洞有自己的半透明畫法，不蓋掉
+      if(!Array.isArray(m.material))return;  // 現在是實心材質，得整個換過（走 rebuild）
+      const o=clampOpa(n.opa);
+      m.material[0].opacity=o*.55;m.material[1].opacity=o;
+    };
+    let started=false;                       // 真的拖動才記 undo，點一下不算
+    opa.oninput=()=>{
+      if(!started){started=true;pushUndo();}
+      n.opa=lastOpa=1-opa.value/100;opaV.textContent=opa.value+'%';paint();
+    };
+    opa.onchange=()=>{ started=false; };     // 放開滑鼠算這一段結束
+    host.querySelectorAll('[data-opa]').forEach(b=>b.onclick=()=>{
+      const on=b.dataset.opa==='1';
+      if(on===(n.opa!=null))return;          // 已經是這個狀態就什麼都不做
+      pushUndo();
+      // 關掉時把數值留在滑桿上，再打開就回到剛才那個透明度
+      if(on)n.opa=lastOpa=1-opa.value/100; else delete n.opa;
+      rebuild();            // 實心↔半透明是兩種材質，要重掛（幾何體走快取，很快）
+    });
+  }
   document.getElementById('drop').onclick=()=>{
     pushUndo();
     const m=meshes.find(x=>x.userData.id===n.id);
@@ -2260,9 +2880,79 @@ addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&k==='g'){e.preventDefault();
     document.getElementById(e.shiftKey?'btnUngroup':'btnGroup').click();}
   if(k==='delete'||k==='backspace')document.getElementById('btnDel').click();
-  if(k==='h'&&selected.length===1){const n=findNode(selected[0]);
+  if((e.ctrlKey||e.metaKey)&&k==='h'){e.preventDefault();
+    selected.length?toggleHide(selected.slice()):showAllNodes();}
+  else if(k==='h'&&!e.ctrlKey&&!e.metaKey&&selected.length===1){const n=findNode(selected[0]);
     pushUndo();n.role=n.role==='hole'?'solid':'hole';rebuild();}
 });
+
+/* ---- 方向鍵推動選取的物件 ----
+   ← → ↑ ↓ 貼著工作平面走，Ctrl+↑↓ 調高度，Shift 跨十倍的大步。
+   一步走多遠＝工具列上的格線格距（SNAP），所以那個選單同時管吸附和方向鍵。
+
+   方向以目前視角為準：取「最接近畫面上下左右」的那根世界軸，所以走出來
+   還是沿著軸的直線、格距也還是準的，只是自動幫你挑對軸。視角轉過去之後
+   按「↑」一樣是往畫面深處走，不必自己換算現在哪一邊是 X。
+
+   跟拖曳同樣的兩個規矩：
+   - 按著的時候只動 mesh 的 transform 做預覽（liveMove），放開才 rebuild()。
+     鍵盤按住不放一秒會送三十下，每一下都算布林運算會整個卡死。
+   - 一連串按鍵只算「一步」undo（beginEdit 只在第一下推進去），不然按住走
+     30mm 要按三十次 Ctrl+Z 才退得回來。
+   停手 220ms（或放開按鍵 120ms）就當這一段結束，重算一次。 */
+(function(){
+  const DIR={arrowup:1,arrowdown:1,arrowleft:1,arrowright:1};
+  let keyIds=null,timer=0;
+  // 把相機的前方／右方壓平到工作平面，各自吸到最接近的那根世界軸
+  function camAxes(){
+    const f=new THREE.Vector3();camera.getWorldDirection(f);f.y=0;
+    if(f.lengthSq()<1e-9)f.set(0,0,-1);
+    const r=new THREE.Vector3(-f.z,0,f.x);          // 前方繞 Y 轉 -90 度＝右方
+    const snap=v=>Math.abs(v.x)>=Math.abs(v.z)
+      ?[0,Math.sign(v.x)||1]:[2,Math.sign(v.z)||1];
+    return {f:snap(f),r:snap(r)};
+  }
+  function endNudge(){
+    clearTimeout(timer);timer=0;
+    if(!keyIds)return;
+    keyIds=null;
+    if(dragEdited)rebuild();                        // 預覽的位移留到換上新 mesh 才消失
+    dragEdited=false;
+  }
+  addEventListener('keydown',e=>{
+    const t=e.target.tagName;
+    if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA')return;
+    const k=e.key.toLowerCase();
+    if(!DIR[k])return;
+    if(mode)return;                                 // 滑鼠正在拖，別插隊
+    if(!selected.length)return;
+    const up=k==='arrowup',down=k==='arrowdown';
+    let ax,sg;
+    if(e.ctrlKey||e.metaKey){
+      if(!up&&!down){e.preventDefault();return;}    // Ctrl+左右沒有意義
+      ax=1;sg=up?1:-1;
+    }else{
+      const a=camAxes();
+      const d=up?[a.f[0],a.f[1]]:down?[a.f[0],-a.f[1]]
+             :k==='arrowright'?[a.r[0],a.r[1]]:[a.r[0],-a.r[1]];
+      ax=d[0];sg=d[1];
+    }
+    e.preventDefault();
+    // 選取的東西換了就當成新的一段，不然 startState 會跟 selected 對不起來
+    const ids=selected.join(',');
+    if(keyIds!==ids){endNudge();keyIds=ids;
+      startState=selected.map(id=>dragCopy(findNode(id)));}
+    beginEdit();
+    const step=(e.shiftKey?10:1)*SNAP;
+    for(const id of selected){const n=findNode(id);n.pos[ax]=q(n.pos[ax]+sg*step);}
+    liveMove();
+    clearTimeout(timer);timer=setTimeout(endNudge,220);
+  });
+  addEventListener('keyup',e=>{
+    if(!DIR[e.key.toLowerCase()]||!keyIds)return;
+    clearTimeout(timer);timer=setTimeout(endNudge,120);
+  });
+})();
 
 /* ---- 檔案選單：點開、點裡面任何一項或點外面都會收起來 ---- */
 (function(){
@@ -2290,6 +2980,7 @@ function download(name,blob){
 document.getElementById('btnSave').onclick=()=>{
   const data={format:'csg-modeler',version:1,unit:'mm',roots,uid};
   download('model.json',new Blob([JSON.stringify(data,null,1)],{type:'application/json'}));
+  markSaved();
 };
 document.getElementById('btnOpen').onclick=()=>document.getElementById('fileIn').click();
 document.getElementById('fileIn').onchange=e=>{
@@ -2304,19 +2995,200 @@ document.getElementById('fileIn').onchange=e=>{
       roots=migrate(d.roots);uid=d.uid||(1+Math.max(0,...JSON.stringify(d.roots).match(/"id":(\d+)/g)
         .map(s=>+s.split(':')[1])));
       selected=[];rebuild();
+      markSaved();          // 剛從檔案讀進來，這一份在硬碟上是有的
     }catch(err){alert('這個檔案讀不進來：'+err.message);}
   };
   r.readAsText(f);
   e.target.value='';
 };
 
-/* ---- 自動暫存：關掉再開回到原狀 ---- */
-let saveChars=0, saveFull=false, buildFail=0;
-function autosave(){
-  const str=JSON.stringify({roots,uid});
+/* ---- 自動暫存：關掉再開回到原狀 ----
+
+   兩件事讓同樣的模型佔更少的位子：
+
+   一、匯入的三角形（tri）不寫成十進位文字，改成 float32 打包再 base64。
+       一個座標從平均十八個字降到 5.33 個字，省三倍多。tri 已經正規化在
+       1×1×1 裡、畫圖時本來也是 float32，所以精度一點都沒少。
+       手動存出來的 JSON 檔維持原本的數字陣列（那是給人看、給人改的），
+       只有暫存走這條路。
+
+   二、真的塞不下時不要全軍覆沒。以前只要超過額度就整包沒存，連你排了
+       半小時的方塊圓柱都一起不見。現在退一步：把匯入模型的三角形拿掉、
+       換成一個佔位的方塊（記著名字、尺寸、位置、是實體還是孔洞），
+       其他照常存。開回來只要把那個檔案重匯一次就接得回去——佔掉空間的
+       那個東西，剛好是最容易補回來的那個。 */
+let saveChars=0, saveFull=false, saveLost=0, buildFail=0;
+const LS_KEY='csgModeler';
+
+/* ---- 暫存放哪裡：三層，能用哪層就用哪層 ----
+
+   idb  IndexedDB —— 容量是硬碟剩餘空間的一到六成（GB 等級）。
+        只有 https／localhost 有；從隨身碟雙擊（file://）會被當成跨來源擋掉。
+   ls   localStorage —— 約 5MB，file:// 下通常還能用，是這個工具的主力。
+   none 都不行 —— 無痕視窗、封鎖 cookie 的設定。這時候只能靠手動存檔。
+
+   **一定要實際試寫一次，不能看網址猜。** 上面每一種「不能用」的情況，
+   從 location.protocol 都看不出來：無痕視窗的網址跟一般的一模一樣，
+   而 file:// 的 localStorage 其實是可以寫的。寫一個探測值再刪掉，成功才算數。
+
+   Cache Storage 沒有做：解鎖條件跟 IndexedDB 一模一樣（都要安全來源），
+   有 IndexedDB 就不需要它，而且它本來是存網路回應用的，拿來存模型是誤用。
+
+   三層的**行為完全一樣**，只有容量不同。刻意不讓大倉庫多出「可以存很多個
+   模型」這類功能——容量不一樣使用者感覺不到，操作方式不一樣他馬上就撞到，
+   那才是真正的麻煩。 */
+const STORE={mode:'none', quota:5e6, note:''};
+const IDB_DB='csgModeler', IDB_ST='kv', IDB_KEY='scene';
+
+function idbOpen(){
+  return new Promise((res,rej)=>{
+    let req;
+    try{req=indexedDB.open(IDB_DB,1);}catch(e){return rej(e);}
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      if(!db.objectStoreNames.contains(IDB_ST))db.createObjectStore(IDB_ST);
+    };
+    req.onsuccess=()=>res(req.result);
+    req.onerror=()=>rej(req.error||new Error('open failed'));
+    req.onblocked=()=>rej(new Error('blocked'));
+    setTimeout(()=>rej(new Error('timeout')),3000);   // 有些環境會沉默地不回話
+  });
+}
+let idb=null;
+function idbDo(mode,fn){
+  return new Promise((res,rej)=>{
+    if(!idb)return rej(new Error('no db'));
+    let tx;
+    try{tx=idb.transaction(IDB_ST,mode);}catch(e){return rej(e);}
+    const r=fn(tx.objectStore(IDB_ST));
+    tx.oncomplete=()=>res(r?r.result:undefined);
+    tx.onerror=()=>rej(tx.error);
+    tx.onabort=()=>rej(tx.error||new Error('abort'));
+  });
+}
+function lsUsable(){
+  try{
+    localStorage.setItem(LS_KEY+':probe','1');
+    const ok=localStorage.getItem(LS_KEY+':probe')==='1';
+    localStorage.removeItem(LS_KEY+':probe');
+    return ok;
+  }catch(e){return false;}
+}
+async function probeStore(){
+  // 第一層：IndexedDB。開得起來還不夠，要真的寫進去再讀回來才算數。
+  try{
+    idb=await idbOpen();
+    await idbDo('readwrite',st=>st.put('1',IDB_KEY+':probe'));
+    const v=await idbDo('readonly',st=>st.get(IDB_KEY+':probe'));
+    await idbDo('readwrite',st=>st.delete(IDB_KEY+':probe'));
+    if(v==='1'){
+      STORE.mode='idb';
+      STORE.quota=500e6;
+      try{
+        const e=await navigator.storage.estimate();
+        if(e&&e.quota)STORE.quota=e.quota;
+      }catch(e){}
+      return;
+    }
+  }catch(e){ idb=null; }
+  idb=null;
+  // 第二層：localStorage
+  if(lsUsable()){STORE.mode='ls';STORE.quota=GAUGE_MAX.mem;return;}
+  // 第三層：沒有
+  STORE.mode='none';STORE.quota=0;
+}
+
+/* tri ⇄ base64。btoa 只吃字串，幾十萬個位元組不能一次 apply 進去
+   （引數太多會爆），所以切成一段一段接起來。 */
+function triEncode(t){
+  const b=new Uint8Array(Float32Array.from(t).buffer);
+  let s='';
+  for(let i=0;i<b.length;i+=8192)s+=String.fromCharCode.apply(null,b.subarray(i,i+8192));
+  return btoa(s);
+}
+function triDecode(s){
+  const bin=atob(s), b=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)b[i]=bin.charCodeAt(i);
+  // 回傳普通陣列：手動存檔和上一步／下一步都是直接 JSON.stringify 整棵樹，
+  // 型別化陣列在那裡會變成 {"0":..} 這種東西。
+  return Array.from(new Float32Array(b.buffer));
+}
+function encodeTree(o){
+  return JSON.stringify(o,(k,v)=>(k==='tri'&&Array.isArray(v))?'b64:'+triEncode(v):v);
+}
+function decodeTri(list){
+  for(const n of list||[]){
+    if(typeof n.tri==='string')n.tri=triDecode(n.tri.slice(4));
+    if(n.children)decodeTri(n.children);
+  }
+  return list;
+}
+
+/* 佔位用的方塊：以原點為中心的 1×1×1，12 個三角形。
+   跟其他匯入的 mesh 走完全同一條路，所以場上、物件樹、把手全部照常運作，
+   只是形狀變成一個框，提醒你這裡少了東西。 */
+function lostTri(){
+  const c=[[-.5,-.5,-.5],[.5,-.5,-.5],[.5,.5,-.5],[-.5,.5,-.5],
+           [-.5,-.5,.5],[.5,-.5,.5],[.5,.5,.5],[-.5,.5,.5]];
+  const f=[[0,3,2],[0,2,1],[4,5,6],[4,6,7],[0,1,5],[0,5,4],
+           [1,2,6],[1,6,5],[2,3,7],[2,7,6],[3,0,4],[3,4,7]];
+  const out=[];
+  for(const t of f)for(const i of t)out.push(...c[i]);
+  return out;
+}
+/* 把匯入的三角形換成佔位方塊，其餘原封不動。回傳新的一棵樹，不動到場上的。 */
+let lostCount=0;
+function stripMesh(list){
+  return (list||[]).map(n=>{
+    const m={...n};
+    if(m.kind==='mesh'&&!m.lost){m.tri=lostTri();m.lost=true;lostCount++;}
+    if(m.children)m.children=stripMesh(m.children);
+    return m;
+  });
+}
+
+/* 真正把字串放進倉庫。三層只有這一小段不一樣，上面的降級邏輯完全共用。
+   IndexedDB 是非同步的，所以整條路都是 async。 */
+async function storePut(str){
+  if(STORE.mode==='idb'){await idbDo('readwrite',st=>st.put(str,IDB_KEY));return;}
+  localStorage.setItem(LS_KEY,str);
+}
+async function storeGet(){
+  if(STORE.mode==='idb'){
+    const v=await idbDo('readonly',st=>st.get(IDB_KEY));
+    if(v)return v;
+    // 大倉庫是空的，但小格子裡可能有上一次（還沒有大倉庫那時候）的東西
+    try{return localStorage.getItem(LS_KEY);}catch(e){return null;}
+  }
+  return localStorage.getItem(LS_KEY);
+}
+async function storeDrop(){
+  try{
+    if(STORE.mode==='idb')await idbDo('readwrite',st=>st.delete(IDB_KEY));
+    else localStorage.removeItem(LS_KEY);
+  }catch(e){}
+}
+
+async function autosave(){
+  // 不能暫存就連算都不要算——encodeTree 對幾十萬個三角形是有成本的，
+  // 算出一個沒地方放的字串是白花力氣。
+  if(STORE.mode==='none'){saveChars=0;saveFull=false;saveLost=0;return;}
+  const str=encodeTree({roots,uid});
   saveChars=str.length;
-  try{localStorage.setItem('csgModeler',str);saveFull=false;}
-  catch(e){saveFull=true;}
+  try{await storePut(str);saveFull=false;saveLost=0;regauge();return;}
+  catch(e){}
+  // 塞不下：退一步，只放棄匯入的三角形
+  lostCount=0;
+  const lite=stripMesh(roots);
+  try{
+    await storePut(encodeTree({roots:lite,uid}));
+    saveFull=true;saveLost=lostCount;
+  }catch(e){
+    // 連這樣都塞不下（幾乎不會發生），至少不要留一份半舊的在那裡騙人
+    await storeDrop();
+    saveFull=true;saveLost=-1;
+  }
+  regauge();
 }
 /* 圓角方塊曾經是獨立的形狀（shape:'rbox'），後來併回方塊。
    舊的暫存或存檔可能還帶著它，讀進來時就地換掉。 */
@@ -2325,19 +3197,41 @@ function migrate(list){
     if(n.shape==='rbox'){n.shape='box';if(!(n.r>0))n.r=2;n.color=SHAPE_COLOR.box;}
     // 六角柱曾經是獨立的形狀，後來併進「正 N 邊形柱」的 N=6
     if(n.shape==='hex'){n.shape='prism';n.sides=6;n.color=SHAPE_COLOR.prism;}
+    delete n.hide;   // 藏起來只在這一次開著的期間有效，載入一律恢復顯示
     if(n.children)migrate(n.children);
   }
   return list;
 }
-function autoload(){
+function countLost(list){
+  let out=[];
+  for(const n of list||[]){
+    if(n.lost)out.push(n.name||'匯入的模型');
+    if(n.children)out=out.concat(countLost(n.children));
+  }
+  return out;
+}
+async function autoload(){
+  if(STORE.mode==='none')return false;
   try{
-    const s=localStorage.getItem('csgModeler');
+    const s=await storeGet();
     if(!s)return false;
     const d=JSON.parse(s);
     if(!Array.isArray(d.roots)||!d.roots.length)return false;
-    dropGeoCache();roots=migrate(d.roots);uid=d.uid;return true;
+    dropGeoCache();roots=migrate(decodeTri(d.roots));uid=d.uid;
+    const lost=countLost(roots);
+    if(lost.length)setTimeout(()=>alert(
+      '上次暫存的空間不夠，這些匯入的模型只留下位置和尺寸：\n\n'+
+      lost.map(s=>'　・'+s).join('\n')+
+      '\n\n畫面上它們現在是空框。重新匯入原本的檔案就可以接回去。'),50);
+    // 從小格子撿回來的（這台電腦剛好開始有大倉庫可以用）：搬進大倉庫、
+    // 小格子那一份刪掉，免得下次大倉庫被擋時又讀到一份舊的騙人。
+    if(STORE.mode==='idb'){
+      try{await storePut(encodeTree({roots,uid}));localStorage.removeItem(LS_KEY);}catch(e){}
+    }
+    return true;
   }catch(e){return false;}
 }
+
 
 /* ---- 油表：這個模型現在吃掉多少力氣 ----
    面數  = 布林運算的成本來源，超過就會開始頓
@@ -2355,27 +3249,78 @@ const GAUGE_MAX={face:400000, mem:5e6, ms:60000};
 function setBar(id,ratio){
   const el=document.getElementById(id);
   const r=Math.min(1,ratio);
-  el.style.width=(r*100).toFixed(1)+'%';
+  // 只要不是零就至少露出 3px。一般建模面數只有兩三百，佔滿格的 0.05%，
+  // 照實畫不到半個像素，看起來就像油表壞了。真正的數字就在右邊，不會誤導。
+  el.style.width=r>0?'max(3px,'+(r*100).toFixed(1)+'%)':'0';
   el.className='fill'+(r>=.8?' hot':r>=.5?' warn':'');
 }
+/* 「上次存檔」這一行三種模式都有用，而且它回答的是學生心裡沒問出口的
+   那個問題——我的東西在哪裡。暫存只是草稿，存出來的 JSON 才是抽屜。 */
+let lastSaveAt=null, dirty=false;
+function markSaved(){lastSaveAt=Date.now();dirty=false;updateSaveRow();}
+function updateSaveRow(){
+  const el=document.getElementById('gSaveN');
+  if(lastSaveAt==null){el.textContent='從沒存過';el.className='sv never';return;}
+  const min=Math.floor((Date.now()-lastSaveAt)/60000);
+  const when = min<1?'剛剛' : min<60?min+' 分鐘前' : Math.floor(min/60)+' 小時前';
+  el.textContent = dirty? when+'（之後又改過）' : when;
+  el.className = 'sv'+(dirty?' stale':'');
+}
+setInterval(updateSaveRow,30000);   // 讓「幾分鐘前」自己跟著走
+
+/* 暫存是非同步寫進去的（IndexedDB），寫完才知道成不成功，
+   所以要能用上一次的數字把油表重畫一遍。 */
+let lastTris=0,lastMs=0;
+function regauge(){updateGauge(lastTris,lastMs);}
+function mb(n){
+  return n>=1e9? (n/1e9).toFixed(1)+'GB' : n>=1e6? (n/1e6).toFixed(1)+'MB'
+       : n>=1e3? Math.round(n/1e3)+'KB' : Math.round(n)+'B';
+}
+function updateStoreRow(){
+  const el=document.getElementById('gStore');
+  if(STORE.mode==='idb')
+    el.textContent='暫存：大倉庫（這台電腦允許，約 '+mb(STORE.quota)+'）';
+  else if(STORE.mode==='ls')
+    el.textContent='暫存：小格子（上限約 5MB，塞不下時只留清單）';
+  else
+    el.textContent='不能自動暫存，關掉就沒了——記得自己存檔';
+  el.className='mode'+(STORE.mode==='none'?' bad':'');
+}
+
 function updateGauge(tris,ms){
+  lastTris=tris;lastMs=ms;
   setBar('gFace',tris/GAUGE_MAX.face);
-  setBar('gMem',saveChars/GAUGE_MAX.mem);
   setBar('gMs',ms/GAUGE_MAX.ms);
   document.getElementById('gFaceN').textContent=
     tris>=10000? (tris/1000).toFixed(0)+'k' : String(tris|0);
-  const memPct=saveChars/GAUGE_MAX.mem*100;
-  document.getElementById('gMemN').textContent=
-    (memPct>0&&memPct<1)? '<1%' : memPct.toFixed(0)+'%';
   document.getElementById('gMsN').textContent=Math.round(ms)+'ms';
+  // 暫存那一根：能存就照實畫，不能存就整根斜紋。斜紋跟空槽長得不一樣，
+  // 因為「沒有這個東西」跟「還沒用到」是兩件事。
+  const memTrack=document.getElementById('gMem').parentNode;
+  const memVal=document.getElementById('gMemN');
+  if(STORE.mode!=='none'){
+    memTrack.className='track';memVal.className='val';
+    setBar('gMem',saveChars/STORE.quota);
+    // 大倉庫的百分比永遠是 0%，那個數字沒有意義，改印實際佔多少
+    memVal.textContent = STORE.mode==='idb' ? mb(saveChars)
+      : ((saveChars/STORE.quota*100)>0&&(saveChars/STORE.quota*100)<1)
+        ? '<1%' : (saveChars/STORE.quota*100).toFixed(0)+'%';
+  }else{
+    memTrack.className='track off';memVal.className='val off';
+    document.getElementById('gMem').style.width='0';
+    memVal.textContent='無';
+  }
+  updateSaveRow();updateStoreRow();
   const note=document.getElementById('gNote');
   let msg='';
   if(buildFail)msg='有物件算不出來，面數太高了';
+  else if(saveLost>0)msg='暫存不夠，匯入的模型沒存到（其他都在），請手動存檔！';
   else if(saveFull)msg='暫存已滿，請手動存檔！';
-  else if(saveChars/GAUGE_MAX.mem>=.8)msg='暫存快滿了，記得存檔';
+  else if(STORE.mode!=='none'&&saveChars/STORE.quota>=.8)msg='暫存快滿了，記得存檔';
   else if(ms/GAUGE_MAX.ms>=.5)msg='每次放開滑鼠都要重算這麼久，動之前先想一下';
   else if(tris/GAUGE_MAX.face>=.8)msg='面數偏高，操作會變慢';
   note.textContent=msg;
+  note.className='note';
   note.style.display=msg?'block':'none';
 }
 
@@ -2433,8 +3378,10 @@ document.getElementById('filePlace').onchange=e=>{
      SOFT  會頓幾秒     — 問一聲
      HEAVY 會卡好幾分鐘 — 用更重的字再問一次，講明畫面會沒反應
      HARD  擋掉
-   十萬面的模型自動暫存（localStorage 約 5MB）一定存不下，autosave()
-   會亮「暫存已滿，請手動存檔！」，那是預期行為，不是壞掉。
+   十萬面的模型自動暫存（localStorage 約 5MB）還是存不下（base64 之後
+   約 4.8MB，加上別的東西就滿了）。這時 autosave() 會退一步：只放棄匯入的
+   三角形、其他照常存，並亮「暫存不夠，匯入的模型沒存到（其他都在）」。
+   那是預期行為，不是壞掉。
 
    不要用自動減面（decimation）來換取更高的上限：匯入的東西必須跟原檔
    一致，簡化會把螺紋、印章圖案磨掉，而使用者不會發現。 */
@@ -2962,7 +3909,14 @@ function textContours(opt){
   return contours;
 }
 
-let txtQual='mid', txtOpt={text:'文字',size:10,thick:2,bold:false};
+let txtQual='mid';
+let txtOpt={text:'文字',font:'Microsoft JhengHei',size:10,thick:2,bold:false,qual:'mid'};
+function setTxtQual(q){
+  txtQual=q;
+  document.querySelectorAll('#txtQual button')
+    .forEach(x=>x.classList.toggle('on',x.dataset.q===q));
+}
+const txtName=t=>t.replace(/\s+/g,' ').trim().slice(0,12);
 function txtFontNow(){
   const sel=document.getElementById('txtFont');
   return sel.value==='__custom'
@@ -2990,19 +3944,28 @@ function txtDraw(){
     cv.height/2+(i-(lines.length-1)/2)*px*1.25));
 }
 document.querySelectorAll('#txtQual button').forEach(b=>{
-  b.onclick=()=>{txtQual=b.dataset.q;
-    document.querySelectorAll('#txtQual button').forEach(x=>x.classList.toggle('on',x===b));};
+  b.onclick=()=>setTxtQual(b.dataset.q);
 });
-function askText(){
+/* init 是「這個文字節點當初用的設定」（重新編輯時傳進來）；
+   沒有就沿用上一次用過的，跟原本一樣。 */
+function askText(init){
   return new Promise(res=>{
     const bg=document.getElementById('txtDlgBg');
     const inp=document.getElementById('txtIn'), sel=document.getElementById('txtFont');
     const custom=document.getElementById('txtFontName');
     const bold=document.getElementById('txtBold');
-    inp.value=txtOpt.text;
-    document.getElementById('txtSize').value=txtOpt.size;
-    document.getElementById('txtThk').value=txtOpt.thick;
-    bold.checked=txtOpt.bold;
+    const o=init||txtOpt;
+    inp.value=o.text;
+    document.getElementById('txtSize').value=o.size;
+    document.getElementById('txtThk').value=o.thick;
+    bold.checked=!!o.bold;
+    const f=o.font||'';
+    if(f&&[...sel.options].some(x=>x.value===f)){sel.value=f;custom.value='';}
+    else if(f){sel.value='__custom';custom.value=f;}
+    custom.style.display=sel.value==='__custom'?'block':'none';
+    setTxtQual(o.qual||'mid');
+    document.getElementById('txtOk').textContent=init?'改好了':'放進來';
+    document.querySelector('#txtDlg h3').textContent=init?'編輯文字':'加入文字';
     bg.classList.add('on');
     requestAnimationFrame(()=>{txtDraw();inp.focus();inp.select();});
     const redraw=()=>{custom.style.display=sel.value==='__custom'?'block':'none';txtDraw();};
@@ -3022,7 +3985,7 @@ function askText(){
                thick:(isFinite(t)&&t>0)?t:2,
                bold:bold.checked, qual:txtQual};
       if(!v.text.trim()){inp.focus();return;}
-      txtOpt={text:v.text,size:v.size,thick:v.thick,bold:v.bold};
+      txtOpt={...v};
       done(v,true);
     };
     const key=e=>{
@@ -3038,9 +4001,8 @@ function askText(){
     addEventListener('keydown',key);
   });
 }
-async function addText(){
-  const opt=await askText();
-  if(!opt)return;
+/* 把設定變成三角形。加入新文字和重新編輯走的是同一段。 */
+async function buildTextTri(opt){
   const bg=document.getElementById('txtDlgBg');
   bg.classList.add('wait');
   await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
@@ -3069,16 +4031,47 @@ async function addText(){
       '之後每次移動、縮放放開滑鼠都會頓幾秒。\n'+
       '調成「粗」可以少一點面。要繼續嗎？'))return;
 
-    const {tri,size,height}=normalizeTris(tri0);
-    pushUndo();
-    const n={id:uid++,kind:'mesh',role:'solid',
-             pos:[0,Math.round(height/2*1e3)/1e3,0],rot:[0,0,0],size,
-             color:SHAPE_COLOR.mesh,
-             name:opt.text.replace(/\s+/g,' ').trim().slice(0,12),
-             tri};
-    placeFree(n);roots.push(n);selected=[n.id];rebuild();
+    return normalizeTris(tri0);
   }catch(err){alert('這幾個字做不出來：'+err.message);}
   finally{bg.classList.remove('on','wait');}
+  return null;
+}
+async function addText(){
+  const opt=await askText();
+  if(!opt)return;
+  const r=await buildTextTri(opt);
+  if(!r)return;
+  pushUndo();
+  const n={id:uid++,kind:'mesh',role:'solid',
+           pos:[0,Math.round(r.height/2*1e3)/1e3,0],rot:[0,0,0],size:r.size,
+           color:SHAPE_COLOR.mesh,
+           name:txtName(opt.text),
+           txt:{...opt},          // 記住當初的設定，之後才改得動
+           tri:r.tri};
+  placeFree(n);roots.push(n);selected=[n.id];rebuild();
+}
+/* 重新編輯：只換掉三角形，pos/rot/post 一個都不碰，所以搬到哪、轉幾度、
+   翻過面全部留著。size 也只在「視窗裡真的改了那一格」時才動——
+   沒動過就沿用你現在拉成的尺寸。字變長是往兩邊長（中心不動）。 */
+async function editText(n){
+  const opt=await askText(n.txt||txtOpt);
+  if(!opt)return;
+  const r=await buildTextTri(opt);
+  if(!r)return;
+  pushUndo();
+  const old=n.txt||{}, cur=n.size, sg=v=>v<0?-1:1;   // 負號是鏡像，要留著
+  const same=(a,b)=>a!=null&&Math.abs(a-b)<1e-9;
+  const h  = same(old.size, opt.size)  ? Math.abs(cur[2]) : opt.size;   // 字高
+  const th = same(old.thick,opt.thick) ? Math.abs(cur[1]) : opt.thick;  // 厚度
+  const f  = h/(r.size[2]||1);
+  const rd = v=>Math.round(v*1e3)/1e3;
+  n.tri=r.tri;
+  n.size=[rd(r.size[0]*f)*sg(cur[0]), rd(th)*sg(cur[1]), rd(h)*sg(cur[2])];
+  n.txt={...opt};
+  n.gen=(n.gen||0)+1;
+  if(n.lost)delete n.lost;              // 暫存塞不下被換成佔位方塊的，這下補回來了
+  if(!n.name||n.name===txtName(old.text||''))n.name=txtName(opt.text);
+  rebuild();drawTree();
 }
 
 /* 元件選單那一格的縮圖：拿自己的管線做一個立體的「A」。
@@ -3500,16 +4493,51 @@ function drawPalette(){
 }
 buildPalette();
 
-/* ---- 起手式：先試著接續上次，沒有的話給一個範例 ---- */
-(function seed(){
-  if(autoload())return;
-  const b=makeShape('box');b.size=[40,24,30];b.pos=[0,12,0];
-  const c=makeShape('cylinder');c.size=[14,40,14];c.pos=[0,12,0];c.role='hole';
-  roots=[b,c];selected=[];
-})();
+/* ---- 起手式：先試著接續上次，沒有的話給一個範例 ----
+   IndexedDB 是非同步的，所以要等倉庫回話再決定放不放範例——不然會看到
+   範例閃一下才被暫存蓋掉。 */
 document.getElementById('busyStop').onclick=cancelJob;
-resize();updateCam();rebuild();
-(function loop(){requestAnimationFrame(loop);layoutDims();renderer.render(scene,camera);drawPalette();})();
+resize();updateCam();
+(async function seed(){
+  await probeStore();
+  updateStoreRow();
+  if(!await autoload()){
+    const b=makeShape('box');b.size=[40,24,30];b.pos=[0,12,0];
+    const c=makeShape('cylinder');c.size=[14,40,14];c.pos=[0,12,0];c.role='hole';
+    roots=[b,c];selected=[];
+  }
+  rebuild();
+})();
+/* 半透明的東西要「遠的先畫」，否則後面那個會蓋在前面那個上面。
+
+   three.js 排序透明物件時，看的是**物件自己的原點**離相機多遠。可是這個
+   專案的幾何體一律烘焙在世界座標、mesh 的 transform 永遠是單位矩陣，所以
+   每一個 mesh 的原點都是 (0,0,0)——排序拿到的距離全部一樣，等於沒排，
+   畫出來的順序就固定是 roots 的順序。轉視角也不會變，所以會看到「後面那個
+   物件的顏色跑到前面來」。其中一個改成不透明就正常，是因為不透明的走的是
+   另一條路（會寫深度、由深度決定誰擋誰）。
+
+   解法是自己算距離、寫進 renderOrder（排序時它排在最前面看）。用幾何體
+   包圍球的中心，因為那才是東西真正在的地方；拖曳中 mesh 會被暫時套一個
+   位移做預覽，所以要乘上 matrixWorld。只有半透明的需要，數量就是最上層
+   物件的個數，每格算一次不痛。
+
+   互相穿插的兩個透明物件仍然沒有正解（同一個像素上誰前誰後在同一個物件裡
+   就不一致了），那要逐像素的做法才解得掉，不在這個工具的範圍。 */
+const _sortV=new THREE.Vector3();
+function orderTransparent(){
+  for(const m of meshes){
+    const tr=Array.isArray(m.material)?true:!!(m.material&&m.material.transparent);
+    if(!tr){m.renderOrder=0;continue;}
+    const g=m.geometry;
+    if(!g.boundingSphere)g.computeBoundingSphere();
+    if(!g.boundingSphere){m.renderOrder=0;continue;}
+    _sortV.copy(g.boundingSphere.center).applyMatrix4(m.matrixWorld);
+    m.renderOrder=-camera.position.distanceTo(_sortV);   // 遠的先畫
+  }
+}
+(function loop(){requestAnimationFrame(loop);orderTransparent();layoutDims();
+  renderer.render(scene,camera);drawPalette();})();
 </script>
 </body>
 </html>
