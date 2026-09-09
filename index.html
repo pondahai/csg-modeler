@@ -1227,7 +1227,10 @@ const FOV=45;
    其他地方拿 camera 都是 position／project／matrix 這類兩種都有的東西，
    唯一分歧的是「視野怎麼算」，統一收在 applyProj() 裡。 */
 const camPersp=new THREE.PerspectiveCamera(FOV,1,.5,4000);
-const camOrtho=new THREE.OrthographicCamera(-1,1,1,-1,.5,4000);
+/* 正交的「最近可見距離」給負的，也就是相機背後也照畫。透視不能這樣（會爆掉），
+   但正交沒有近大遠小，相機在哪只決定「從哪個方向看」，不決定大小——沿用透視的
+   0.5 會讓拉近時模型被切掉一半，因為正交拉近是相機真的靠進模型裡面。 */
+const camOrtho=new THREE.OrthographicCamera(-1,1,1,-1,-4000,4000);
 let camera=camPersp;
 const renderer=new THREE.WebGLRenderer({antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
@@ -2089,7 +2092,9 @@ function screenRectOf(m){
   for(let i=0;i<8;i++){
     v.set(i&1?bb.max.x:bb.min.x, i&2?bb.max.y:bb.min.y, i&4?bb.max.z:bb.min.z);
     v.applyMatrix4(m.matrixWorld).applyMatrix4(camera.matrixWorldInverse);
-    if(v.z>-.01)continue;                 // 這個角落在鏡頭後面，跳過
+    /* 正交連相機背後都照畫（見上），所以那時候不能把背後的角落跳掉，
+       不然拉近之後框選會框不到那半邊。 */
+    if(camera!==camOrtho&&v.z>-.01)continue;   // 這個角落在鏡頭後面，跳過
     front=true;
     v.applyMatrix4(camera.projectionMatrix);
     const sx=r.left+(v.x*.5+.5)*r.width, sy=r.top+(-v.y*.5+.5)*r.height;
