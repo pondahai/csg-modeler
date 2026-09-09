@@ -1166,6 +1166,26 @@ function applyNodeMatrix(g,m){
   g.attributes.position.needsUpdate=true;
   return g;
 }
+/* 合體要一個一個算的「操作元」。子節點是群組時要把裡面的零件攤平，
+   各自套上群組的矩陣單獨拿出來，不可以把整包多邊形當成一塊。
+   理由：群組完全不做布林運算，只是把零件的殼黏成一包；零件之間一重疊，
+   那包東西裡就有一堆跑到別人身體裡的面，BSP 判內外會互相矛盾——該刪的
+   沒刪、內部的面留著，畫出來就是破圖。攤平之後每個零件各自 union 一次，
+   重疊被真正算掉，交出去的永遠是乾淨的殼。
+   等於使用者手動「先解散群組再合體」，但樹上的群組原封不動留著（可逆）。
+   巢狀群組跟著遞迴。群組裡的孔洞照舊跳過——群組本來就不做加減，
+   那些孔洞挖不到任何東西（見屬性面板的說明）。 */
+function* operandsG(c){
+  if(!isSet(c))return [yield* evalNodeG(c)];
+  const M=matrixOf(c), out=[];
+  for(const g of c.children){
+    if(g.role!=='solid')continue;
+    for(const p of yield* operandsG(g)){
+      out.push(yield* transformPolysG(p,M));
+    }
+  }
+  return out;
+}
 function* evalNodeG(n){
   let polys;
   if(n.kind==='shape'){
@@ -1193,14 +1213,17 @@ function* evalNodeG(n){
     let acc=null;
     for(const c of n.children){
       if(c.role!=='solid')continue;
-      const p=yield* evalNodeG(c);
-      acc = acc? yield* csgG(acc,p,'union') : p;
+      for(const p of yield* operandsG(c)){
+        acc = acc? yield* csgG(acc,p,'union') : p;
+      }
     }
     if(!acc)acc=[];
     for(const c of n.children){
       if(c.role!=='hole')continue;
-      if(!acc.length)break;
-      acc=yield* csgG(acc,yield* evalNodeG(c),'subtract');
+      for(const p of yield* operandsG(c)){
+        if(!acc.length)break;
+        acc=yield* csgG(acc,p,'subtract');
+      }
     }
     polys=yield* transformPolysG(acc,matrixOf(n));
   }
