@@ -1173,18 +1173,25 @@ function applyNodeMatrix(g,m){
    沒刪、內部的面留著，畫出來就是破圖。攤平之後每個零件各自 union 一次，
    重疊被真正算掉，交出去的永遠是乾淨的殼。
    等於使用者手動「先解散群組再合體」，但樹上的群組原封不動留著（可逆）。
-   巢狀群組跟著遞迴。群組裡的孔洞照舊跳過——群組本來就不做加減，
-   那些孔洞挖不到任何東西（見屬性面板的說明）。 */
+   巢狀群組跟著遞迴。
+
+   回傳分成 sol／hol 兩堆，因為群組裡的孔洞也要跟著攤出來——
+   「合體遇到群組」既然等於「先解散再合體」，那手動解散會挖的洞，
+   不解散也要挖，否則同一件事兩條路結果不一樣。所以「多個孔洞先框成
+   一個群組、再拿去跟外殼合體」是可行的用法。
+   單獨擺在場上的群組維持原樣（孔洞畫成紅色但挖不到東西），
+   那時本來就沒有東西可以挖。 */
 function* operandsG(c){
-  if(!isSet(c))return [yield* evalNodeG(c)];
-  const M=matrixOf(c), out=[];
+  if(!isSet(c))return {sol:[yield* evalNodeG(c)],hol:[]};
+  const M=matrixOf(c), sol=[], hol=[];
   for(const g of c.children){
-    if(g.role!=='solid')continue;
-    for(const p of yield* operandsG(g)){
-      out.push(yield* transformPolysG(p,M));
-    }
+    const o=yield* operandsG(g);
+    // 零件自己的 role 決定它進哪一堆；巢狀群組被標成孔洞時整包對調
+    const a=g.role==='hole'?o.hol:o.sol, b=g.role==='hole'?o.sol:o.hol;
+    for(const p of a)sol.push(yield* transformPolysG(p,M));
+    for(const p of b)hol.push(yield* transformPolysG(p,M));
   }
-  return out;
+  return {sol,hol};
 }
 function* evalNodeG(n){
   let polys;
@@ -1210,20 +1217,18 @@ function* evalNodeG(n){
     }
     polys=yield* transformPolysG(acc,matrixOf(n));
   } else {
-    let acc=null;
+    let acc=null; const subs=[];
+    // 先把實體都聯集起來，孔洞先收著（維持「加完才減」的順序）
     for(const c of n.children){
-      if(c.role!=='solid')continue;
-      for(const p of yield* operandsG(c)){
-        acc = acc? yield* csgG(acc,p,'union') : p;
-      }
+      const o=yield* operandsG(c);
+      const add=c.role==='hole'?o.hol:o.sol, cut=c.role==='hole'?o.sol:o.hol;
+      for(const p of add)acc = acc? yield* csgG(acc,p,'union') : p;
+      for(const p of cut)subs.push(p);
     }
     if(!acc)acc=[];
-    for(const c of n.children){
-      if(c.role!=='hole')continue;
-      for(const p of yield* operandsG(c)){
-        if(!acc.length)break;
-        acc=yield* csgG(acc,p,'subtract');
-      }
+    for(const p of subs){
+      if(!acc.length)break;
+      acc=yield* csgG(acc,p,'subtract');
     }
     polys=yield* transformPolysG(acc,matrixOf(n));
   }
@@ -2836,7 +2841,8 @@ function drawInspector(){
     </div>
     ${set?`<div class="empty" style="text-align:left;line-height:1.6">
       綁在一起的 ${n.children.length} 個零件，只是方便一起搬，
-      <b>不會互相加減</b>：裡面的孔洞挖不到東西，也不會被匯出。<br>
+      <b>彼此不會互相加減</b>：就這樣擺著的話，裡面的孔洞挖不到東西，
+      也不會被匯出。<b>拿去跟別的東西「合體」，那些孔洞就會挖下去。</b><br>
       顏色、透明、尺寸和角度都留在各個零件身上，要改就先「拆開」。
     </div>`:`
     <div class="seg">
