@@ -1289,7 +1289,7 @@ const boxHelper=new THREE.Box3Helper(new THREE.Box3(),0xc98a12);
 boxHelper.visible=false;helpLayer.add(boxHelper);
 
 const yHandle=new THREE.Mesh(new THREE.ConeGeometry(2.6,7,16),
-  new THREE.MeshBasicMaterial({color:0xd99a1f,depthTest:false,depthWrite:false}));
+  new THREE.MeshBasicMaterial({color:0xd99a1f,depthTest:false,depthWrite:false,transparent:true,opacity:.3}));
 yHandle.renderOrder=995;yHandle.name='yHandle';yHandle.visible=false;helpLayer.add(yHandle);
 
 // 縮放把手：四角 + 四邊中點（貼在底面）＋ 頂部中央調高度
@@ -1299,7 +1299,11 @@ yHandle.renderOrder=995;yHandle.name='yHandle';yHandle.visible=false;helpLayer.a
    （DIM_COLOR 那組）用的是同一招。depthWrite 也關掉，免得把手的深度去影響
    後面才畫的半透明物件。 */
 const HAND_ORDER=995;
-const handTop={depthTest:false,depthWrite:false};
+/* 把手做成很淺的半透明：看得到、點得到，但不會擋住正在看的模型。
+   transparent 一開就必須配 depthWrite:false（本來就是關的），否則半透明
+   的把手會把後面的東西的深度寫掉。 */
+const HAND_OPA=.3;
+const handTop={depthTest:false,depthWrite:false,transparent:true,opacity:HAND_OPA};
 const matCorner=new THREE.MeshBasicMaterial({color:0x3f4754,...handTop});
 const matEdge=new THREE.MeshBasicMaterial({color:0x8a93a3,...handTop});
 const matTop=new THREE.MeshBasicMaterial({color:0x2f9fd0,...handTop});
@@ -1322,7 +1326,7 @@ const geoRing=new THREE.TorusGeometry(1,.028,8,72);    // 細的不好點，粗�
 const rings=[];
 [['x',0xd98f99],['y',0x9cc48a],['z',0x8fb4d6]].forEach(([ax,col])=>{
   const m=new THREE.Mesh(geoRing,
-    new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.75}));
+    new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.3}));
   m.userData={axis:ax};m.visible=false;helpLayer.add(m);rings.push(m);
 });
 /* 拖著某一圈轉的時候，另外兩圈先收起來，免得跟正在轉的那一圈混在一起。
