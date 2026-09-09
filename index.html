@@ -307,7 +307,8 @@
 
 <div id="bar">
   <div class="title">加減法建模器 <span>CSG</span></div>
-  <button id="btnGroup">組合</button>
+  <button id="btnGroup" title="合體：裡面的孔洞會把實體挖穿（Ctrl+G）">合體</button>
+  <button id="btnSet" title="群組：只是綁在一起方便搬，不做加減（Ctrl+Shift+G 拆開）">群組</button>
   <button id="btnUngroup">拆開</button>
   <button id="btnDup" title="Ctrl+D：拖到定位後再按一次，會照同樣的距離一直排下去">複製</button>
   <button id="btnDel">刪除</button>
@@ -351,7 +352,7 @@
 </div>
 
 <aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="hidBar"><span id="hidTxt"></span><button id="showAll" type="button">全部顯示</button></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="row"><span class="lbl">存檔</span><span class="sv never" id="gSaveN">從沒存過</span></div><div class="mode" id="gStore"></div><div class="note" id="gNote"></div></div></aside>
-<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><button id="hintBtn" type="button" title="操作說明">?</button><div id="hint"><b>動東西</b>拖物件＝平面移動　拖黃錐＝調高度　拖到一半按 Esc＝取消這次動作<br>拖角落白點＝等比縮放（按住 Shift 連高度一起）　拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度<br>按住 Ctrl 拖＝讓它坐到下面那個東西的表面上<br>方向鍵＝推動（一步＝上面的「格線」）　Ctrl＋上下＝調高度　加按 Shift＝一次走十倍<b>選東西</b>點物件＝選取　Shift＋點＝加選　點空白處＝取消選取<br>空白處拖＝框選（框到的全選，被別的東西擋住也算）<b>看東西</b>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<b>快速鍵</b>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>Ctrl+G＝組合　Ctrl+Shift+G＝拆開　Delete＝刪除　Ctrl+Z＝上一步（加 Shift＝下一步）<br>H＝實體↔孔洞（只選一個時）　Ctrl+H＝藏起來／叫回來（沒選東西＝全部顯示）</div></div>
+<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><button id="hintBtn" type="button" title="操作說明">?</button><div id="hint"><b>動東西</b>拖物件＝平面移動　拖黃錐＝調高度　拖到一半按 Esc＝取消這次動作<br>拖角落白點＝等比縮放（按住 Shift 連高度一起）　拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度<br>按住 Ctrl 拖＝讓它坐到下面那個東西的表面上<br>方向鍵＝推動（一步＝上面的「格線」）　Ctrl＋上下＝調高度　加按 Shift＝一次走十倍<b>選東西</b>點物件＝選取　Shift＋點＝加選　點空白處＝取消選取<br>空白處拖＝框選（框到的全選，被別的東西擋住也算）<b>看東西</b>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<b>快速鍵</b>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>Ctrl+G＝合體（孔洞會挖穿）　Ctrl+Shift+G＝拆開　Delete＝刪除　Ctrl+Z＝上一步（加 Shift＝下一步）<br>H＝實體↔孔洞（只選一個時）　Ctrl+H＝藏起來／叫回來（沒選東西＝全部顯示）</div></div>
 <div id="dim"></div>
 <div id="dimLblX" class="dimLbl"></div><div id="dimLblY" class="dimLbl"></div><div id="dimLblZ" class="dimLbl"></div>
 <div id="svgDlgBg" class="dlgBg"><div id="svgDlg" class="dlg">
@@ -907,6 +908,15 @@ let uid=1;
 let roots=[];          // 最上層物件
 let selected=[];       // 選取的最上層物件 id
 let undoStack=[], redoStack=[];
+/* 「群組」＝不做加減的合體。資料上就是 kind:'group' 多一個 set:true，
+   不是新的節點型別，所以存檔、undo、拆開、面數、物件樹全部沿用。
+   差別只在算幾何體那一步：合體要跑布林運算（裡面的孔洞會把實體挖穿），
+   群組只是把零件的三角形接在一起，完全不算——所以再多零件也是一瞬間，
+   而且每個零件保住自己的顏色和透明度（場上一個群組會掛好幾個 mesh，
+   共用同一個最上層 id）。
+   群組裡的孔洞挖不到任何東西：照樣畫成紅色半透明，但不匯出，
+   跟「最上層的孔洞」完全一致。 */
+function isSet(n){return !!(n&&n.kind==='group'&&n.set);}
 
 // 每種形狀有自己的固定顏色，一眼認得出誰是誰
 const SHAPE_COLOR={box:'#5b8dd6',cylinder:'#e0a83c',cone:'#e08a3c',
@@ -1158,6 +1168,14 @@ function* evalNodeG(n){
     applyNodeMatrix(g,matrixOf(n));
     polys=yield* geoToPolysG(g);
     g.dispose();
+  } else if(n.set){
+    // 群組：不做任何加減，把零件的多邊形接起來就好（孔洞不是實體，跳過）
+    let acc=[];
+    for(const c of n.children){
+      if(c.role!=='solid')continue;
+      acc=acc.concat(yield* evalNodeG(c));
+    }
+    polys=yield* transformPolysG(acc,matrixOf(n));
   } else {
     let acc=null;
     for(const c of n.children){
@@ -1378,7 +1396,7 @@ function kindKey(n){
     if(n.shape==='prism')k+=`|${prismSides(n)}`;   // 邊數不看 size，只放邊數
     return k;
   }
-  if(n.kind!=='mesh')return 'g';
+  if(n.kind!=='mesh')return n.set?'gs':'g';
   // 不整包 stringify（幾十萬個數字），改用長度＋幾個取樣點。
   // 光靠 id 不夠：換一個檔案可能出現相同編號卻是不同模型。
   const t=n.tri,L=t.length;
@@ -1401,8 +1419,9 @@ function geoKey(n){
   return kindKey(n)+mirrorKey(n)+
     (n.children?'('+n.children.map(subKey).join(',')+')':'');
 }
+function dropParts(parts){for(const q of parts||[])q.geo.dispose();}
 function dropGeoCache(){
-  for(const v of geoCache.values())v.geo.dispose();
+  for(const v of geoCache.values())dropParts(v.parts);
   geoCache.clear();
 }
 function sameMat(a,b){
@@ -1427,27 +1446,48 @@ function dropJob(j){
 /* 取得一個最上層物件的幾何體（呼叫端拿到的是自己的一份，用完可以 dispose）。
    重算和匯出共用同一條路，所以匯出得到的就是畫面上那個東西，
    而且沒被動過的直接沿用快取，不必重算。 */
-function* geoForRootG(n){
+/* 一個最上層物件可能不只一塊：群組是「不做加減」，所以每個零件各自一塊、
+   各自帶自己的顏色和透明度（場上就掛好幾個 mesh，共用同一個 id）。
+   合體和單一形狀就是一塊，ci 為 -1 表示「材質看節點自己」。 */
+function partSrc(n,ci){return ci<0?n:n.children[ci];}
+function* rootPartsG(n){
   const key=geoKey(n), M=matrixOf(n), c=geoCache.get(n.id);
   if(c&&c.key===key){
     // 形狀沒變，只是換了位置／角度／大小：套一次差值矩陣就好
-    const geo=c.geo.clone();
-    if(!sameMat(c.mat,M)){
-      geo.applyMatrix4(new THREE.Matrix4().multiplyMatrices(
-        M,new THREE.Matrix4().copy(c.mat).invert()));
+    const D=sameMat(c.mat,M)?null:new THREE.Matrix4().multiplyMatrices(
+              M,new THREE.Matrix4().copy(c.mat).invert());
+    return c.parts.map(q=>{
+      const geo=q.geo.clone();
+      if(D)geo.applyMatrix4(D);
+      return {geo,ci:q.ci,src:partSrc(n,q.ci)};
+    });
+  }
+  let parts=[],ok=true;
+  try{
+    if(isSet(n)){
+      // 群組：一個零件一塊，完全不做布林運算。孔洞照樣畫（紅色半透明），
+      // 只是它挖不到任何東西，匯出時會被濾掉。
+      for(let i=0;i<n.children.length;i++){
+        const g=yield* polysToGeoG(
+          yield* transformPolysG(yield* evalNodeG(n.children[i]),M));
+        const pa=g.getAttribute('position');
+        if(pa&&pa.count)parts.push({geo:g,ci:i}); else g.dispose();
+      }
+    }else{
+      parts=[{geo:yield* polysToGeoG(yield* evalNodeG(n)),ci:-1}];
     }
-    return geo;
   }
-  let geo,ok=true;
-  try{ geo=yield* polysToGeoG(yield* evalNodeG(n)); }
-  catch(e){ console.warn(e); geo=new THREE.BufferGeometry(); buildFail++; ok=false; }
+  catch(e){ console.warn(e);
+    for(const q of parts)q.geo.dispose();
+    parts=[{geo:new THREE.BufferGeometry(),ci:-1}]; buildFail++; ok=false; }
   if(ok){                       // 算失敗的不要進快取，否則永遠不會再試一次
-    if(c)c.geo.dispose();
-    geoCache.set(n.id,{key,mat:M.clone(),geo:geo.clone()});
+    if(c)dropParts(c.parts);
+    geoCache.set(n.id,{key,mat:M.clone(),
+      parts:parts.map(q=>({geo:q.geo.clone(),ci:q.ci}))});
   }else if(c){
-    c.geo.dispose();geoCache.delete(n.id);
+    dropParts(c.parts);geoCache.delete(n.id);
   }
-  return geo;
+  return parts.map(q=>({geo:q.geo,ci:q.ci,src:partSrc(n,q.ci)}));
 }
 /* ---- 「先看到東西」的預覽層 ----
    剛開網頁或剛開檔時，畫面是空的，而慢的一直都是布林運算那一步。所以先把
@@ -1563,11 +1603,14 @@ function xrayMat(col,op,side,dim,front){
 function disposeMat(m){
   if(Array.isArray(m))m.forEach(x=>x.dispose()); else if(m)m.dispose();
 }
-function addMesh(n,geo){
-  const isHole=n.role==='hole';
+/* n＝最上層物件（決定 id 和藏不藏），src＝這一塊的材質從誰身上拿
+   （群組的話就是那個零件，其他情況 src 就是 n 自己）。 */
+function addMesh(n,geo,src){
+  const t=src||n;
+  const isHole=t.role==='hole';
   // 孔洞本來就有自己的半透明畫法，使用者設的透明度只管實體
-  const op=isHole?.32:clampOpa(n.opa);
-  const base=new THREE.Color(isHole?0xe8657f:(n.color||'#5b8dd6'));
+  const op=isHole?.32:clampOpa(t.opa);
+  const base=new THREE.Color(isHole?0xe8657f:(t.color||'#5b8dd6'));
   let mat;
   if(op>=1){
     mat=new THREE.MeshLambertMaterial({color:base,side:THREE.DoubleSide});
@@ -1601,14 +1644,17 @@ function* rebuildG(my){
   for(let i=0;i<roots.length;i++){
     const n=roots[i];
     my.stage=roots.length>1?`計算中 ${i+1}/${roots.length}`:'計算中';
-    const geo=yield* geoForRootG(n);
-    if(stream){addMesh(n,geo);dropPreview(n.id);}   // 算好的換掉自己那一團預覽
-    else built.push({n,geo});
+    const parts=yield* rootPartsG(n);
+    if(stream){                                    // 算好的換掉自己那一團預覽
+      for(const q of parts)addMesh(n,q.geo,q.src);
+      dropPreview(n.id);
+    }
+    else for(const q of parts)built.push({n,geo:q.geo,src:q.src});
     yield;
   }
   // 已經不在場上的就別佔記憶體了
   for(const [id,v] of geoCache){
-    if(!roots.some(r=>r.id===id)){v.geo.dispose();geoCache.delete(id);}
+    if(!roots.some(r=>r.id===id)){dropParts(v.parts);geoCache.delete(id);}
   }
   if(!stream){
     // 算完了才換上去
@@ -1617,7 +1663,7 @@ function* rebuildG(my){
       const m=objLayer.children.pop();m.geometry.dispose();disposeMat(m.material);
     }
     meshes.length=0;
-    for(const {n,geo} of built)addMesh(n,geo);
+    for(const {n,geo,src} of built)addMesh(n,geo,src);
   }
   previewClear();
   drawTree();drawInspector();updateHandles();autosave();
@@ -1677,6 +1723,17 @@ function cancelJob(){
   note.style.display='block';
 }
 function selectedMeshes(){return meshes.filter(m=>selected.includes(m.userData.id));}
+/* 一個 id 可能對到好幾個 mesh（群組不做加減，一個零件一塊），
+   所以要「這個物件的所有塊」時用 meshesOf，要它的包圍盒時用 boxOfId。 */
+function meshesOf(id){return meshes.filter(m=>m.userData.id===id);}
+function boxOfId(id){
+  const b=new THREE.Box3();let any=false;
+  for(const m of meshesOf(id)){
+    m.geometry.computeBoundingBox();
+    b.union(new THREE.Box3().copy(m.geometry.boundingBox));any=true;
+  }
+  return any?b:null;
+}
 function selBox(){
   const b=new THREE.Box3();let any=false;
   for(const m of selectedMeshes()){m.geometry.computeBoundingBox();
@@ -1688,6 +1745,14 @@ function placeHandles(b){
   const s=Math.max(1.6,sph.r*0.019);
   yHandle.position.set(c.x,b.max.y+s*3.2,c.z);yHandle.visible=true;
   yHandle.scale.setScalar(s/2.6);
+  /* 群組只給搬移，不給縮放和旋轉：群組只是「綁在一起」，一轉一拉就會踩到
+     拆開時 decompose() 拆不出歪斜那個坑（見拆開那一段）。少開這扇門，
+     拆開永遠走「只是被搬過」那條精確的路。 */
+  if(selected.some(id=>isSet(findNode(id)))){
+    for(const h of handles)h.visible=false;
+    for(const r of rings)r.visible=false;
+    ringBox=null;handBox=b.clone();return;
+  }
   for(const h of handles){
     const d=h.userData;
     h.position.set(
@@ -1952,7 +2017,8 @@ function applyMarquee(x,y){
       if(!m.visible)continue;            // 藏起來的框選也框不到
       const b=screenRectOf(m);
       if(!b)continue;
-      if(b.x0<=a.x1&&b.x1>=a.x0&&b.y0<=a.y1&&b.y1>=a.y0)hit.push(m.userData.id);
+      if(b.x0<=a.x1&&b.x1>=a.x0&&b.y0<=a.y1&&b.y1>=a.y0&&
+         !hit.includes(m.userData.id))hit.push(m.userData.id);
     }
   }
   selected = start.add ? start.base.concat(hit.filter(id=>!start.base.includes(id))) : hit;
@@ -2245,11 +2311,11 @@ function selWorldBox(){
 }
 function liveMove(){
   selected.forEach((id,i)=>{
-    const m=meshes.find(x=>x.userData.id===id);if(!m)return;
     const n=findNode(id);
-    m.position.set(n.pos[0]-startState[i].pos[0],
-                   n.pos[1]-startState[i].pos[1],
-                   n.pos[2]-startState[i].pos[2]);
+    for(const m of meshesOf(id))
+      m.position.set(n.pos[0]-startState[i].pos[0],
+                     n.pos[1]-startState[i].pos[1],
+                     n.pos[2]-startState[i].pos[2]);
   });
   const b=new THREE.Box3();let any=false;
   for(const m of selectedMeshes()){
@@ -2353,7 +2419,7 @@ function nodeLabel(n){
   // 暫存空間不夠時被拿掉三角形的匯入模型，現在只是一個佔位的空框
   if(n.lost)return '⚠ '+(n.name||'匯入')+'（要重匯）';
   if(n.name)return n.name;
-  if(n.kind==='group')return '組合';
+  if(n.kind==='group')return n.set?'群組':'合體';
   if(n.kind==='mesh')return '匯入';
   if(n.shape==='box')return boxR(n)?'圓角方塊':'方塊';
   if(n.shape==='prism'){
@@ -2407,8 +2473,7 @@ function toggleHide(ids){
   pushUndo();
   for(const n of list){
     if(on)n.hide=true; else delete n.hide;
-    const m=meshes.find(x=>x.userData.id===n.id);
-    if(m)m.visible=!n.hide;
+    for(const m of meshesOf(n.id))m.visible=!n.hide;
   }
   if(on)selected=selected.filter(id=>!ids.includes(id));   // 看不見的東西不留在選取裡
   drawTree();drawInspector();updateHandles();autosave();
@@ -2418,8 +2483,7 @@ function showAllNodes(){
   pushUndo();
   for(const n of roots){
     delete n.hide;
-    const m=meshes.find(x=>x.userData.id===n.id);
-    if(m)m.visible=true;
+    for(const m of meshesOf(n.id))m.visible=true;
   }
   drawTree();drawInspector();updateHandles();autosave();
 }
@@ -2475,9 +2539,7 @@ function alignSel(axis,where){
   const tgt=where<0?all.min:where>0?all.max:all.getCenter(new THREE.Vector3());
   const k=['x','y','z'].indexOf(axis);
   for(const id of selected){
-    const m=meshes.find(x=>x.userData.id===id);if(!m)continue;
-    m.geometry.computeBoundingBox();
-    const b=m.geometry.boundingBox;
+    const b=boxOfId(id);if(!b)continue;
     const cur=where<0?b.min[axis]:where>0?b.max[axis]:(b.min[axis]+b.max[axis])/2;
     findNode(id).pos[k]+=Math.round((tgt[axis]-cur)*100)/100;
   }
@@ -2490,9 +2552,7 @@ function alignDelta(axis,where){
   const all=selBox();if(!all)return out;
   const tgt=where<0?all.min:where>0?all.max:all.getCenter(new THREE.Vector3());
   for(const id of selected){
-    const m=meshes.find(x=>x.userData.id===id);if(!m)continue;
-    m.geometry.computeBoundingBox();
-    const b=m.geometry.boundingBox;
+    const b=boxOfId(id);if(!b)continue;
     const cur=where<0?b.min[axis]:where>0?b.max[axis]:(b.min[axis]+b.max[axis])/2;
     out.set(id,Math.round((tgt[axis]-cur)*100)/100);
   }
@@ -2515,6 +2575,19 @@ function mirrorPivot(){
   const b=selBox();
   return b?b.getCenter(new THREE.Vector3()):null;
 }
+/* 翻一個節點。cv 是鏡面在「這個節點所在的座標系」裡的位置。
+   群組身上不留 rot/size/post（那樣拆開時才永遠走得到精確那條路），
+   所以群組是往下傳給每個零件，鏡面換算成群組內部的座標。 */
+function mirrorNodeIn(n,k,cv){
+  if(isSet(n)){
+    for(const c of n.children||[])mirrorNodeIn(c,k,cv-n.pos[k]);
+    return;
+  }
+  const p=(n.post||[1,1,1]).slice();
+  p[k]=-p[k];
+  if(p[0]===1&&p[1]===1&&p[2]===1)delete n.post; else n.post=p;
+  n.pos[k]=Math.round((2*cv-n.pos[k])*100)/100;
+}
 function mirrorSel(axis){
   if(!selected.length)return;
   const c=mirrorPivot();if(!c)return;
@@ -2522,10 +2595,7 @@ function mirrorSel(axis){
   pushUndo();
   for(const id of selected){
     const n=findNode(id);if(!n)continue;
-    const p=(n.post||[1,1,1]).slice();
-    p[k]=-p[k];
-    if(p[0]===1&&p[1]===1&&p[2]===1)delete n.post; else n.post=p;
-    n.pos[k]=Math.round((2*c[axis]-n.pos[k])*100)/100;
+    mirrorNodeIn(n,k,c[axis]);
   }
   ghostClear();rebuild();
 }
@@ -2614,21 +2684,27 @@ function drawInspector(){
         <div class="grp"><h2>鏡像（繞整包的中心翻）</h2></div>
         <div class="seg">${mbtn('x','左右')}${mbtn('y','上下')}${mbtn('z','前後')}</div>
         <div class="grp"></div>
-        <button id="doGroup" style="width:100%">組合成一個</button>`;
+        <button id="doGroup" style="width:100%">合體成一個（孔洞會挖穿）</button>
+        <button id="doSet" style="width:100%;margin-top:6px">群組（只是綁在一起搬）</button>`;
       host.querySelectorAll('[data-ax]').forEach(b=>{
         b.onclick=()=>alignSel(b.dataset.ax,+b.dataset.w);
         b.onpointerenter=()=>ghostAlign(b.dataset.ax,+b.dataset.w);
         b.onpointerleave=ghostClear;
       });
       hookMirror(host);
-      document.getElementById('doGroup').onclick=()=>
-        document.getElementById('btnGroup').click();
+      document.getElementById('doGroup').onclick=()=>packSelected(false);
+      document.getElementById('doSet').onclick=()=>packSelected(true);
     } else {
       host.innerHTML='<div class="empty">選一個物件來編輯。</div>';
     }
     return;
   }
   const n=findNode(selected[0]);
+  /* 群組只是「綁在一起方便搬」：不做加減，所以沒有實體／孔洞之分，
+     顏色和透明度也都留在各個零件身上。尺寸和旋轉也不給——群組身上一旦
+     留下 rot/size/post，拆開時就只能靠 decompose()，那會讓轉斜又拉伸過的
+     零件形狀跳掉（見拆開那一段）。 */
+  const set=isSet(n);
   // 九宮格裡的一格：沒有自己的 label，欄名靠最上面那排、組名靠左邊那欄
   const cell=(val,path,i)=>
     `<input type="number" step="1" value="${val}" data-p="${path}" data-i="${i}">`;
@@ -2638,18 +2714,23 @@ function drawInspector(){
         style="width:100%;font:inherit;color:var(--text);background:var(--ink);
                border:1px solid var(--line);border-radius:4px;padding:4px 6px">
     </div>
+    ${set?`<div class="empty" style="text-align:left;line-height:1.6">
+      綁在一起的 ${n.children.length} 個零件，只是方便一起搬，
+      <b>不會互相加減</b>：裡面的孔洞挖不到東西，也不會被匯出。<br>
+      顏色、透明、尺寸和角度都留在各個零件身上，要改就先「拆開」。
+    </div>`:`
     <div class="seg">
       <button data-role="solid" class="${n.role==='solid'?'on':''}">實體</button>
       <button data-role="hole" class="${n.role==='hole'?'on hole':''}">孔洞</button>
-    </div>
+    </div>`}
     <div class="g9">
       <span></span><span class="hd">X</span><span class="hd">Y</span><span class="hd">Z</span>
-      <span class="rl">尺寸<small>mm</small></span>
-      ${cell(n.size[0],'size',0)}${cell(n.size[1],'size',1)}${cell(n.size[2],'size',2)}
+      ${set?'':`<span class="rl">尺寸<small>mm</small></span>
+      ${cell(n.size[0],'size',0)}${cell(n.size[1],'size',1)}${cell(n.size[2],'size',2)}`}
       <span class="rl">位置<small>mm</small></span>
       ${cell(n.pos[0],'pos',0)}${cell(n.pos[1],'pos',1)}${cell(n.pos[2],'pos',2)}
-      <span class="rl">旋轉<small>度</small></span>
-      ${cell(n.rot[0],'rot',0)}${cell(n.rot[1],'rot',1)}${cell(n.rot[2],'rot',2)}
+      ${set?'':`<span class="rl">旋轉<small>度</small></span>
+      ${cell(n.rot[0],'rot',0)}${cell(n.rot[1],'rot',1)}${cell(n.rot[2],'rot',2)}`}
     </div>
     ${n.shape==='box'?`<div class="grp"><h2>圓角 mm（0 就是直角）</h2></div>
       <div class="row"><label>R</label>
@@ -2662,9 +2743,9 @@ function drawInspector(){
       <input type="number" step="1" min="3" max="24" id="sides" value="${prismSides(n)}"></div>`:''}
     ${n.txt?`<div class="grp"><h2>文字</h2></div>
       <button id="edTxt" style="width:100%">編輯文字…</button>`:''}
-    <div class="grp"><h2>顏色</h2></div>
-    <input type="color" value="${n.color||'#5b8dd6'}" id="col">
-    ${n.role==='hole'?'':`
+    ${set?'':`<div class="grp"><h2>顏色</h2></div>
+    <input type="color" value="${n.color||'#5b8dd6'}" id="col">`}
+    ${(set||n.role==='hole')?'':`
     <div class="seg" style="margin-top:8px">
       <button data-opa="0" class="${n.opa==null?'on':''}">不透明</button>
       <button data-opa="1" class="${n.opa==null?'':'on'}">透明</button>
@@ -2722,11 +2803,12 @@ function drawInspector(){
   if(opa){
     // 改透明度只換材質，不必重算 CSG，所以拖的過程畫面就即時跟著變
     const paint=()=>{
-      const m=meshes.find(x=>x.userData.id===n.id);
-      if(!m||n.role==='hole')return;         // 孔洞有自己的半透明畫法，不蓋掉
-      if(!Array.isArray(m.material))return;  // 現在是實心材質，得整個換過（走 rebuild）
+      if(n.role==='hole')return;             // 孔洞有自己的半透明畫法，不蓋掉
       const o=clampOpa(n.opa);
-      m.material[0].opacity=o*.55;m.material[1].opacity=o;
+      for(const m of meshesOf(n.id)){
+        if(!Array.isArray(m.material))continue; // 實心材質得整個換過（走 rebuild）
+        m.material[0].opacity=o*.55;m.material[1].opacity=o;
+      }
     };
     let started=false;                       // 真的拖動才記 undo，點一下不算
     opa.oninput=()=>{
@@ -2745,8 +2827,8 @@ function drawInspector(){
   }
   document.getElementById('drop').onclick=()=>{
     pushUndo();
-    const m=meshes.find(x=>x.userData.id===n.id);
-    if(m){m.geometry.computeBoundingBox();n.pos[1]-=m.geometry.boundingBox.min.y;}
+    const b=boxOfId(n.id);
+    if(b)n.pos[1]-=b.min.y;
     rebuild();
   };
 }
@@ -2756,16 +2838,22 @@ function drawInspector(){
    ============================================================ */
 function add(shape,r){pushUndo();const n=placeFree(makeShape(shape,r));roots.push(n);selected=[n.id];rebuild();}
 
-// 組合：原料原封不動搬進 children，只是多包一層
-document.getElementById('btnGroup').onclick=()=>{
+/* 合體和群組是同一個動作，只差「要不要做加減」：
+   - 合體（set 為假）：裡面的孔洞會把實體挖穿，要跑布林運算
+   - 群組（set 為真）：只是綁在一起方便搬，完全不算，零件各自保留顏色
+   兩者原料都原封不動搬進 children，只是多包一層，隨時拆得開。 */
+function packSelected(set){
   if(selected.length<2)return;
   pushUndo();
   const kids=roots.filter(n=>selected.includes(n.id));
   roots=roots.filter(n=>!selected.includes(n.id));
   const g={id:uid++,kind:'group',role:'solid',
            pos:[0,0,0],rot:[0,0,0],size:[1,1,1],children:kids};
+  if(set)g.set=true;
   roots.push(g);selected=[g.id];rebuild();
-};
+}
+document.getElementById('btnGroup').onclick=()=>packSelected(false);
+document.getElementById('btnSet').onclick=()=>packSelected(true);
 /* 拆開：把 children 拿回最上層，順便把組合本身的變換烘進去。
 
    這裡曾經有一個會讓形狀突變的坑：矩陣的排法是 位移 · post · 旋轉 · size，
@@ -4136,10 +4224,12 @@ function* exportGeosG(my,label){
   const out=[];
   for(let i=0;i<list.length;i++){
     my.stage=`${label}：${i+1}/${list.length}`;
-    const geo=yield* geoForRootG(list[i]);
-    const p=geo.getAttribute('position');
-    if(p&&p.count)out.push({n:list[i],geo});
-    else geo.dispose();
+    // 群組是好幾塊，各出各的（孔洞挖不到東西，不匯出）
+    for(const q of yield* rootPartsG(list[i])){
+      const p=q.geo.getAttribute('position');
+      if(p&&p.count&&q.src.role==='solid')out.push({n:q.src,geo:q.geo});
+      else q.geo.dispose();
+    }
     yield;
   }
   return out;
