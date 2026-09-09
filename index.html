@@ -190,6 +190,19 @@
   /* 分區標題。八行平鋪找不到東西，分成「動／選／看／快速鍵」四塊 */
   #hint b{display:block;margin:7px 0 2px;color:#a8452f;font-weight:600;}
   #hint b:first-child{margin-top:0;}
+  /* 六面導覽：切到正視圖。按下去鏡頭是滑過去的（flyTo），不是瞬間跳，
+     不然人會不知道自己從哪轉到哪，一樣會迷路。 */
+  #nav{
+    position:absolute;right:12px;bottom:12px;z-index:7;
+    display:grid;grid-template-columns:repeat(4,26px);gap:4px;
+  }
+  #nav button{
+    width:26px;height:26px;padding:0;border-radius:5px;
+    background:rgba(255,252,244,.9);border:1px solid #cfc6ae;color:#6b6353;
+    font:inherit;font-size:12px;line-height:1;cursor:pointer;
+  }
+  #nav button:hover{background:#fff;color:#2b2b2b;}
+  #nav button.on{background:var(--solid);border-color:var(--solid);color:#06121b;}
   #hintBtn{
     position:absolute;left:12px;bottom:12px;z-index:7;
     width:26px;height:26px;padding:0;border-radius:50%;
@@ -352,7 +365,7 @@
 </div>
 
 <aside id="tree"><h2>物件樹</h2><div id="treeBody"></div><div id="hidBar"><span id="hidTxt"></span><button id="showAll" type="button">全部顯示</button></div><div id="gauge"><div class="row"><span class="lbl">面數</span><span class="track"><span class="fill" id="gFace"></span></span><span class="val" id="gFaceN">0</span></div><div class="row"><span class="lbl">暫存</span><span class="track"><span class="fill" id="gMem"></span></span><span class="val" id="gMemN">0%</span></div><div class="row"><span class="lbl">重算</span><span class="track"><span class="fill" id="gMs"></span></span><span class="val" id="gMsN">0ms</span></div><div class="row"><span class="lbl">存檔</span><span class="sv never" id="gSaveN">從沒存過</span></div><div class="mode" id="gStore"></div><div class="note" id="gNote"></div></div></aside>
-<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><button id="hintBtn" type="button" title="操作說明">?</button><div id="hint"><b>動東西</b>拖物件＝平面移動　拖黃錐＝調高度　拖到一半按 Esc＝取消這次動作<br>拖角落白點＝等比縮放（按住 Shift 連高度一起）　拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度<br>按住 Ctrl 拖＝讓它坐到下面那個東西的表面上<br>方向鍵＝推動（一步＝上面的「格線」）　Ctrl＋上下＝調高度　加按 Shift＝一次走十倍<b>選東西</b>點物件＝選取　Shift＋點＝加選　點空白處＝取消選取<br>空白處拖＝框選（框到的全選，被別的東西擋住也算）<b>看東西</b>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<b>快速鍵</b>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>Ctrl+G＝合體（孔洞會挖穿）　Ctrl+Shift+G＝拆開　Delete＝刪除　Ctrl+Z＝上一步（加 Shift＝下一步）<br>H＝實體↔孔洞（只選一個時）　Ctrl+H＝藏起來／叫回來（沒選東西＝全部顯示）</div></div>
+<div id="view"><button class="tgl" id="tglTree" type="button" title="收起／展開物件樹">◀</button><button class="tgl" id="tglInsp" type="button" title="收起／展開屬性">▶</button><div id="busy"><span id="busyTxt">計算中</span><button id="busyStop" type="button">取消</button></div><div id="marquee"></div><button id="hintBtn" type="button" title="操作說明">?</button><div id="nav"><button type="button" data-v="top" title="從上往下看（俯視圖）">上</button><button type="button" data-v="bottom" title="從下往上看（仰視圖）">下</button><button type="button" data-v="front" title="從正前方看">前</button><button type="button" data-v="back" title="從正後方看">後</button><button type="button" data-v="left" title="從正左方看">左</button><button type="button" data-v="right" title="從正右方看">右</button><button type="button" data-v="iso" title="回到斜著看的角度">斜</button><button id="btnOrtho" type="button" title="正交視圖：不管遠近都一樣大，方便比對尺寸和對齊（再點一下換回透視）">正</button></div><div id="hint"><b>動東西</b>拖物件＝平面移動　拖黃錐＝調高度　拖到一半按 Esc＝取消這次動作<br>拖角落白點＝等比縮放（按住 Shift 連高度一起）　拖邊中點＝只拉那一邊　拖頂部藍點＝只改高度<br>按住 Ctrl 拖＝讓它坐到下面那個東西的表面上<br>方向鍵＝推動（一步＝上面的「格線」）　Ctrl＋上下＝調高度　加按 Shift＝一次走十倍<b>選東西</b>點物件＝選取　Shift＋點＝加選　點空白處＝取消選取<br>空白處拖＝框選（框到的全選，被別的東西擋住也算）<b>看東西</b>按住 Alt 移動＝平移　Alt＋Shift 移動＝轉視角（不必按鍵，觸控板也好用）<br>右鍵拖＝轉視角　中鍵拖＝平移　捲動＝遠近<br>右下角上下前後左右＝轉到那一面的正視圖（鏡頭會滑過去）　斜＝回到斜著看的角度<br>右下角「正」＝正交視圖，不管遠近都一樣大，比對尺寸和對齊用（「上」＋「正」＝真正平的俯視圖）<b>快速鍵</b>Ctrl+D＝複製（拖到定位後再按，會照同樣的距離一直排下去）<br>Ctrl+G＝合體（孔洞會挖穿）　Ctrl+Shift+G＝拆開　Delete＝刪除　Ctrl+Z＝上一步（加 Shift＝下一步）<br>H＝實體↔孔洞（只選一個時）　Ctrl+H＝藏起來／叫回來（沒選東西＝全部顯示）</div></div>
 <div id="dim"></div>
 <div id="dimLblX" class="dimLbl"></div><div id="dimLblY" class="dimLbl"></div><div id="dimLblZ" class="dimLbl"></div>
 <div id="svgDlgBg" class="dlgBg"><div id="svgDlg" class="dlg">
@@ -1209,7 +1222,13 @@ function redo(){if(!redoStack.length)return;undoStack.push(snapshot());restore(r
 const view=document.getElementById('view');
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0xf3ecd9);
-const camera=new THREE.PerspectiveCamera(45,1,.5,4000);
+const FOV=45;
+/* 兩顆相機共用同一組 sph／target，隨時換人上場（見 setOrtho）。
+   其他地方拿 camera 都是 position／project／matrix 這類兩種都有的東西，
+   唯一分歧的是「視野怎麼算」，統一收在 applyProj() 裡。 */
+const camPersp=new THREE.PerspectiveCamera(FOV,1,.5,4000);
+const camOrtho=new THREE.OrthographicCamera(-1,1,1,-1,.5,4000);
+let camera=camPersp;
 const renderer=new THREE.WebGLRenderer({antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 view.appendChild(renderer.domElement);
@@ -1325,7 +1344,19 @@ topHandle.visible=false;helpLayer.add(topHandle);handles.push(topHandle);
 /* ---- 相機控制 ---- */
 const target=new THREE.Vector3(0,10,0);
 let sph={r:150,theta:Math.PI*.28,phi:Math.PI*.32};
+/* 正交沒有「近大遠小」，所以它的視野寬度就是我們自己算的：取跟透視在
+   target 那個距離上一樣的框，兩種模式切過去大小才不會跳。因為它跟 sph.r
+   綁在一起，捲動縮放不必另外處理。 */
+function applyProj(){
+  const w=view.clientWidth||1,h=view.clientHeight||1;
+  if(camera===camOrtho){
+    const hh=sph.r*Math.tan(FOV/2*Math.PI/180);
+    camera.top=hh;camera.bottom=-hh;camera.right=hh*w/h;camera.left=-hh*w/h;
+  }else camera.aspect=w/h;
+  camera.updateProjectionMatrix();
+}
 function updateCam(){
+  applyProj();
   camera.position.set(
     target.x+sph.r*Math.sin(sph.phi)*Math.sin(sph.theta),
     target.y+sph.r*Math.cos(sph.phi),
@@ -1339,9 +1370,64 @@ function updateCam(){
   else if(ringBox&&mode!=='rotate')
     placeRings(ringBox,ringBox.getCenter(new THREE.Vector3()),Math.max(1.6,sph.r*0.019));
 }
+/* ---- 六面導覽：滑過去，不要用跳的 ----
+   瞬間切換的話，人不知道自己剛剛從哪轉到哪，一樣會迷路；滑過去的那 0.4 秒
+   就是在說明「你正繞著模型轉到上面」。theta 走「最短的那一邊」（從 350 度
+   到 10 度要往前走 20 度，不是倒著轉 340 度），不然畫面會繞一大圈。
+   只動角度，不動 target 和 sph.r——遠近和平移是使用者自己調的，不要搶走。 */
+let camAnim=null;
+function flyTo(theta,phi,ms=400){
+  let d=theta-sph.theta;
+  d=Math.atan2(Math.sin(d),Math.cos(d));        // 收進 -π～π，就是最短的那一邊
+  camAnim={t0:performance.now(),ms,th0:sph.theta,dth:d,ph0:sph.phi,dph:phi-sph.phi};
+}
+/* 使用者一動鏡頭就放棄動畫，不然會跟他搶方向盤 */
+function stopFly(){camAnim=null;}
+function stepCam(){
+  if(!camAnim)return;
+  let k=(performance.now()-camAnim.t0)/camAnim.ms;
+  if(k>=1)k=1;
+  const e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;    // 頭尾慢、中間快
+  sph.theta=camAnim.th0+camAnim.dth*e;
+  sph.phi=camAnim.ph0+camAnim.dph*e;
+  updateCam();
+  if(k===1)camAnim=null;
+}
+const HALF=Math.PI/2;
+/* 俯視／仰視沒有「正面朝哪」可言，所以把目前的 theta 吸到最近的 90 度整數倍：
+   結果是可預期的正視圖，又離你現在看的方向最近。 */
+function snapTheta(){return Math.round(sph.theta/HALF)*HALF;}
+/* 正上方看正下方時，「哪邊是上」沒有答案，lookAt 會退化，所以要留一點點傾斜。
+   但那一點點必須小到看不出來：本來留 0.05 弧度＝2.9 度，實際看得出來沒有對正。
+   1e-3 弧度＝0.06 度，在 40mm 的東西上偏不到一個像素。 */
+const TOP_EPS=1e-3;
+const NAV={
+  top   :()=>[snapTheta(),TOP_EPS],
+  bottom:()=>[snapTheta(),Math.PI-TOP_EPS],
+  front :()=>[0,HALF],
+  back  :()=>[Math.PI,HALF],
+  right :()=>[HALF,HALF],
+  left  :()=>[-HALF,HALF],
+  iso   :()=>[Math.PI*.28,Math.PI*.32],
+};
+for(const b of document.querySelectorAll('#nav button'))
+  b.onclick=()=>{const [t,p]=NAV[b.dataset.v]();flyTo(t,p);};
+
+/* ---- 正交／透視 ----
+   透視是「近大遠小」，看起來自然，但兩個一樣大的東西擺在遠近不同的位置，
+   畫面上就是不一樣大——沒辦法用眼睛比對尺寸和對齊。正交把遠近拿掉，
+   畫面上一樣長就是真的一樣長，配上六面視圖就是工程製圖的看法。 */
+const btnOrtho=document.getElementById('btnOrtho');
+function setOrtho(on){
+  camera=on?camOrtho:camPersp;
+  btnOrtho.classList.toggle('on',on);
+  updateCam();
+}
+btnOrtho.onclick=()=>setOrtho(camera!==camOrtho);
+
 function resize(){
   const w=view.clientWidth,h=view.clientHeight;
-  camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);
+  applyProj();renderer.setSize(w,h);
 }
 addEventListener('resize',resize);
 
@@ -2099,6 +2185,7 @@ renderer.domElement.addEventListener('pointerdown',e=>{
   drawMarquee(e.clientX,e.clientY);
 });
 function panBy(dx,dy){
+  stopFly();
   const f=sph.r*.0016;
   const right=new THREE.Vector3().setFromMatrixColumn(camera.matrix,0);
   const up=new THREE.Vector3().setFromMatrixColumn(camera.matrix,1);
@@ -2107,6 +2194,7 @@ function panBy(dx,dy){
   updateCam();
 }
 function orbitBy(dx,dy){
+  stopFly();
   sph.theta-=dx*.006;
   sph.phi=Math.max(.05,Math.min(Math.PI-.05,sph.phi-dy*.006));
   updateCam();
@@ -2409,7 +2497,7 @@ renderer.domElement.addEventListener('wheel',e=>{
   if(e.deltaMode===1)d*=16;          // 以「行」為單位
   else if(e.deltaMode===2)d*=100;    // 以「頁」為單位
   d=Math.max(-4,Math.min(4,d/100));
-  sph.r=Math.max(12,Math.min(1200,sph.r*Math.pow(1.12,d)));updateCam();
+  stopFly();sph.r=Math.max(12,Math.min(1200,sph.r*Math.pow(1.12,d)));updateCam();
 },{passive:false});
 
 /* ============================================================
@@ -4641,7 +4729,7 @@ function orderTransparent(){
     m.renderOrder=-camera.position.distanceTo(_sortV);   // 遠的先畫
   }
 }
-(function loop(){requestAnimationFrame(loop);orderTransparent();layoutDims();
+(function loop(){requestAnimationFrame(loop);stepCam();orderTransparent();layoutDims();
   renderer.render(scene,camera);drawPalette();})();
 </script>
 </body>
