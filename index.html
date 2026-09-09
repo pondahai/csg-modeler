@@ -1186,7 +1186,8 @@ function* operandsG(c){
   const M=matrixOf(c), sol=[], hol=[];
   for(const g of c.children){
     const o=yield* operandsG(g);
-    // 零件自己的 role 決定它進哪一堆；巢狀群組被標成孔洞時整包對調
+    /* 零件自己的 role 決定它進哪一堆。群組整包不給標成孔洞（鍵盤和面板
+       都擋了，migrate 也會撿舊檔），這一行是防呆，不是可用的功能。 */
     const a=g.role==='hole'?o.hol:o.sol, b=g.role==='hole'?o.sol:o.hol;
     for(const p of a)sol.push(yield* transformPolysG(p,M));
     for(const p of b)hol.push(yield* transformPolysG(p,M));
@@ -3111,7 +3112,11 @@ addEventListener('keydown',e=>{
   if(k==='delete'||k==='backspace')document.getElementById('btnDel').click();
   if((e.ctrlKey||e.metaKey)&&k==='h'){e.preventDefault();
     selected.length?toggleHide(selected.slice()):showAllNodes();}
+  /* 群組不給切孔洞：孔洞是標在零件身上的，群組整包標下去畫面完全看不出來
+     （每一塊的顏色是從零件身上拿的），匯出時卻整包不見。屬性面板也是同樣
+     的理由不放那兩顆按鈕，這裡要一起擋，不然就是個看不見的後門。 */
   else if(k==='h'&&!e.ctrlKey&&!e.metaKey&&selected.length===1){const n=findNode(selected[0]);
+    if(isSet(n))return;
     pushUndo();n.role=n.role==='hole'?'solid':'hole';rebuild();}
 });
 
@@ -3427,6 +3432,10 @@ function migrate(list){
     // 六角柱曾經是獨立的形狀，後來併進「正 N 邊形柱」的 N=6
     if(n.shape==='hex'){n.shape='prism';n.sides=6;n.color=SHAPE_COLOR.prism;}
     delete n.hide;   // 藏起來只在這一次開著的期間有效，載入一律恢復顯示
+    /* 群組沒有「整包是孔洞」這個概念——孔洞是標在零件身上的。舊版的鍵盤
+       h 沒擋住群組，標下去畫面完全看不出來（群組每一塊的顏色是從零件身上
+       拿的），但匯出時整包會不見。撿到就改回實體。 */
+    if(isSet(n))n.role='solid';
     if(n.children)migrate(n.children);
   }
   return list;
