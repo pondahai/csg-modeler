@@ -4332,6 +4332,201 @@ function textTileGeo(){
   return g;
 }
 
+/* ---- 匯出前補「T 形接點」（repairG）----
+   布林運算切面時，只有「跨過切割面」的多邊形會被切開，隔壁那片完全在
+   同一側的鄰居不會跟著切。結果是兩片面貼得緊緊的、中間沒有縫隙，但
+   切開的那一片多出來的頂點，鄰居身上沒有：
+
+       上面這片被切成三段：  ●──────●──────●──────●
+       下面這片沒被切：      ●─────────────────────●
+
+   軟體檢查「每條邊是不是剛好被兩個三角形共用」就會判定它是破的，畫面上
+   還會沿著那條線畫出一道髮絲細的線。實測一個 20mm 方塊挖一根 6mm 方孔
+   就產生 44 條這種邊，而體積是精確的（缺口面積 0）——東西沒有少，
+   只是頂點沒有共用。這是 csg.js 這一系列 BSP 演算法的先天特性，
+   業界的做法都是算完之後再補一道。
+
+   所以這裡把「鄰居有、自己沒有」的頂點插回邊上。插進去的點本來就精確
+   落在那條邊上，所以形狀、體積、包圍盒一個都不會變。
+
+   **只在匯出時做，不碰畫面、不碰 geoCache。** 畫面不在意 T 形接點
+   （照樣畫得好好的），而這一步的成本跟面數成正比，放進重算那條路會
+   讓每次拖曳都變慢。
+
+   三個關鍵，改動時不要動掉：
+
+   1. **邊的切法要記在 edge 快取裡，兩邊共用同一份。** 同一條邊被兩個
+      三角形各算一次的話，浮點誤差會讓兩邊插出來的點差一點點，等於
+      白補。鑰匙用「小的頂點編號_大的頂點編號」，方向無關。
+   2. **補過的三角形要用「重心扇形」切，不可以從角落扇出去。** 從角落
+      A 扇出去的話，落在 A 自己那兩條邊上的新點會生出面積為零的三角形；
+      把那些零面積的丟掉，那個點就又不見了，T 形接點原地復活。從重心
+      扇出去每一片都有面積，而且外圈每一段都被保留。沒有插到點的三角形
+      維持原樣，不加重心，免得平白多三成的面。
+   3. **只丟掉「焊完之後有兩個頂點變成同一點」的三角形。** 那種三角形
+      的三條邊裡有兩條是同一條邊走兩遍，本來就自己抵銷，拿掉不會讓
+      鄰居落單。面積很小但頂點不重合的碎片**不可以丟**——丟了會讓
+      隔壁那片邊沒人配對，等於製造新的破洞。 */
+const WELD_Q=1e-4;      // 兩個頂點靠多近算同一點（mm）
+const TJ_TOL=1e-4;      // 頂點離一條邊多近算「壓在這條邊上」（mm）
+/* 走訪一條線段經過的格子（Amanatides–Woo）。
+   不可以改成「沿線每隔一點取樣再取所在格子」——線段斜著切過格子角落時
+   會整格跳過去，那一格裡的頂點就漏掉了。 */
+function walkCells(ax,ay,az,bx,by,bz,C,cb){
+  let ix=Math.floor(ax/C),iy=Math.floor(ay/C),iz=Math.floor(az/C);
+  const ex=Math.floor(bx/C),ey=Math.floor(by/C),ez=Math.floor(bz/C);
+  const dx=bx-ax,dy=by-ay,dz=bz-az;
+  const sx=dx>0?1:dx<0?-1:0, sy=dy>0?1:dy<0?-1:0, sz=dz>0?1:dz<0?-1:0;
+  const bd=(i,s,a,d)=>s?(((s>0?i+1:i)*C)-a)/d:Infinity;
+  let tx=bd(ix,sx,ax,dx), ty=bd(iy,sy,ay,dy), tz=bd(iz,sz,az,dz);
+  const gx=sx?C/Math.abs(dx):Infinity, gy=sy?C/Math.abs(dy):Infinity, gz=sz?C/Math.abs(dz):Infinity;
+  for(let guard=0;guard<100000;guard++){
+    cb(ix,iy,iz);
+    if(ix===ex&&iy===ey&&iz===ez)return;
+    if(tx<ty&&tx<tz){ix+=sx;tx+=gx;}
+    else if(ty<tz){iy+=sy;ty+=gy;}
+    else{iz+=sz;tz+=gz;}
+  }
+}
+function* repairG(geo){
+  const pos=geo.attributes.position, nor=geo.attributes.normal, N=pos.count;
+  if(N<3)return geo;
+  let budget=YIELD_EVERY;
+  const breathe=function*(){if(--budget<=0){budget=YIELD_EVERY;yield;}};
+  /* 1. 焊接頂點：量化成 1e-4mm 的格子當鑰匙，順便看一圈鄰居的格子，
+        免得兩個相距 0.00009mm 的點剛好被格線分到兩邊。 */
+  const key=new Map(), vx=[],vy=[],vz=[];
+  const vi=new Int32Array(N);
+  for(let i=0;i<N;i++){
+    const x=pos.getX(i),y=pos.getY(i),z=pos.getZ(i);
+    const kx=Math.round(x/WELD_Q),ky=Math.round(y/WELD_Q),kz=Math.round(z/WELD_Q);
+    const k0=kx+','+ky+','+kz;
+    /* 先查自己那一格（八成以上都在這裡中），沒中才掃一圈鄰居——
+       掃鄰居是為了兩個相距 0.00009mm 卻剛好被格線分開的點。
+       兩段分開寫是有理由的：一律掃 27 格的話，93k 面的球光是焊接
+       就要 767ms，先查自己那格只要 51ms。 */
+    let j=key.get(k0);
+    if(j===undefined)
+      for(let a=-1;a<=1&&j===undefined;a++)for(let b=-1;b<=1&&j===undefined;b++)for(let c=-1;c<=1&&j===undefined;c++)
+        j=key.get((kx+a)+','+(ky+b)+','+(kz+c));
+    if(j===undefined){j=vx.length;vx.push(x);vy.push(y);vz.push(z);}
+    key.set(k0,j);
+    vi[i]=j;
+    yield* breathe();
+  }
+  /* 2. 唯一頂點丟進空間格子，等一下找「壓在邊上的點」用。
+        格子大小照包圍盒算，讓長邊大約切成 128 格。 */
+  let x0=Infinity,y0=Infinity,z0=Infinity,x1=-Infinity,y1=-Infinity,z1=-Infinity;
+  for(let i=0;i<vx.length;i++){
+    if(vx[i]<x0)x0=vx[i]; if(vx[i]>x1)x1=vx[i];
+    if(vy[i]<y0)y0=vy[i]; if(vy[i]>y1)y1=vy[i];
+    if(vz[i]<z0)z0=vz[i]; if(vz[i]>z1)z1=vz[i];
+  }
+  const C=Math.max((Math.max(x1-x0,y1-y0,z1-z0)||1)/128,1e-3);
+  const grid=new Map();
+  for(let i=0;i<vx.length;i++){
+    // 落在格線上時兩邊都放，這樣線段走過的格子一定找得到它
+    const lo=v=>Math.floor((v-TJ_TOL)/C), hi=v=>Math.floor((v+TJ_TOL)/C);
+    for(let a=lo(vx[i]);a<=hi(vx[i]);a++)for(let b=lo(vy[i]);b<=hi(vy[i]);b++)for(let c=lo(vz[i]);c<=hi(vz[i]);c++){
+      const k=a+','+b+','+c;
+      const L=grid.get(k); if(L)L.push(i); else grid.set(k,[i]);
+    }
+    yield* breathe();
+  }
+  /* 3. 每條邊算一次「中間壓著哪些點」，記在快取裡給兩邊共用。 */
+  const ecache=new Map();
+  function splitsOf(p,q){
+    const k=(p<q?p:q)+'_'+(p<q?q:p);
+    let r=ecache.get(k);
+    if(r===undefined){
+      /* 一定要用「編號小的 → 編號大的」這個固定方向去算，快取才對得起來：
+         快取是兩個三角形共用的，存的順序必須跟鑰匙的方向一致，
+         否則另一邊拿去反轉會得到相反的排列，環就繞成之字形，
+         扇出來的三角形互相重疊（症狀是面積變多、破邊補不乾淨）。 */
+      const lo=p<q?p:q, hi=p<q?q:p;
+      const ax=vx[lo],ay=vy[lo],az=vz[lo], bx=vx[hi],by=vy[hi],bz=vz[hi];
+      const dx=bx-ax,dy=by-ay,dz=bz-az, L2=dx*dx+dy*dy+dz*dz;
+      const hit=[];
+      if(L2>0){
+        const seen=new Set();
+        walkCells(ax,ay,az,bx,by,bz,C,(a,b,c)=>{
+          const L=grid.get(a+','+b+','+c); if(!L)return;
+          for(const j of L){
+            if(j===lo||j===hi||seen.has(j))continue;
+            seen.add(j);
+            const ux=vx[j]-ax,uy=vy[j]-ay,uz=vz[j]-az;
+            const t=(ux*dx+uy*dy+uz*dz)/L2;
+            if(t<=0||t>=1)continue;
+            const ex=ux-t*dx,ey=uy-t*dy,ez=uz-t*dz;
+            if(ex*ex+ey*ey+ez*ez<TJ_TOL*TJ_TOL)hit.push([t,j]);
+          }
+        });
+        hit.sort((m,n)=>m[0]-n[0]);
+      }
+      r=hit.map(h=>h[1]);           // 由 min(p,q) 往 max(p,q) 排好
+      ecache.set(k,r);
+    }
+    return p<q?r:r.slice().reverse();
+  }
+  /* 4. 重新出三角形。有插到點的用重心扇形，沒有的原樣照抄。 */
+  const out=[],onr=[];
+  const push=(ax,ay,az,bx,by,bz,cx,cy,cz,nx,ny,nz)=>{
+    out.push(ax,ay,az,bx,by,bz,cx,cy,cz);
+    onr.push(nx,ny,nz,nx,ny,nz,nx,ny,nz);
+  };
+  /* 把「三角形＋邊上多出來的點」這個環切成三角形。
+     **不可以從角落扇出去然後把面積為零的丟掉**——落在那個角落兩條邊上的
+     新點會生出零面積的三角形，丟掉之後那個點就又不見了，T 形接點原地
+     復活（第一版就是這樣，補完還剩 828 條破邊）。
+     所以先耳切：每次挑一個真的有面積的耳朵切下來，切不動了才把剩下的
+     從第一個點扇出去（扇形本身不會弄丟環上的邊，弄丟的是「丟掉零面積
+     三角形」那個動作）。耳切比重心扇形少加一半以上的面：
+     實測同一個外殼，重心扇形 29360 面、耳切 25497 面。 */
+  function triRing(ring,nx,ny,nz){
+    const q=ring.slice();
+    const emit=(a,b,c)=>push(vx[a],vy[a],vz[a],vx[b],vy[b],vz[b],vx[c],vy[c],vz[c],nx,ny,nz);
+    const area2=(a,b,c)=>{
+      const ux=vx[b]-vx[a],uy=vy[b]-vy[a],uz=vz[b]-vz[a];
+      const wx=vx[c]-vx[a],wy=vy[c]-vy[a],wz=vz[c]-vz[a];
+      const px=uy*wz-uz*wy,py=uz*wx-ux*wz,pz=ux*wy-uy*wx;
+      return px*px+py*py+pz*pz;
+    };
+    let guard=q.length*4;
+    while(q.length>3&&guard-->0){
+      let cut=-1;
+      for(let k=0;k<q.length;k++){
+        const a=q[(k+q.length-1)%q.length],b=q[k],c=q[(k+1)%q.length];
+        if(area2(a,b,c)>1e-20){cut=k;emit(a,b,c);break;}
+      }
+      if(cut<0)break;
+      q.splice(cut,1);
+    }
+    // 切不動的殘局照樣要出完，扇形會把環上每一段都用到
+    for(let k=1;k+1<q.length;k++)emit(q[0],q[k],q[k+1]);
+  }
+  let added=0,dropped=0;
+  for(let i=0;i<N;i+=3){
+    const a=vi[i],b=vi[i+1],c=vi[i+2];
+    const nx=nor?nor.getX(i):0, ny=nor?nor.getY(i):0, nz=nor?nor.getZ(i):0;
+    if(a===b||b===c||a===c){dropped++;yield* breathe();continue;}
+    const s1=splitsOf(a,b),s2=splitsOf(b,c),s3=splitsOf(c,a);
+    if(!s1.length&&!s2.length&&!s3.length){
+      push(vx[a],vy[a],vz[a],vx[b],vy[b],vz[b],vx[c],vy[c],vz[c],nx,ny,nz);
+    }else{
+      const ring=[a,...s1,b,...s2,c,...s3];
+      added+=s1.length+s2.length+s3.length;
+      triRing(ring,nx,ny,nz);
+    }
+    yield* breathe();
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(out,3));
+  g.setAttribute('normal',new THREE.Float32BufferAttribute(onr,3));
+  g.userData.repair={inserted:added,dropped,before:N/3,after:out.length/9};
+  geo.dispose();
+  return g;
+}
+
 /* ---- 匯出 ----
    **不會自動幫你做組合。** 沒有組合起來的東西就是各自獨立的：
    最上層的實體各出各的，最上層的孔洞不會自動去挖別人——想讓孔洞生效，
@@ -4362,7 +4557,8 @@ function* exportGeosG(my,label){
     // 群組是好幾塊，各出各的（孔洞挖不到東西，不匯出）
     for(const q of yield* rootPartsG(list[i])){
       const p=q.geo.getAttribute('position');
-      if(p&&p.count&&q.src.role==='solid')out.push({n:q.src,geo:q.geo});
+      // 匯出前補 T 形接點：形狀、體積、外框都不變，只是把破邊補起來
+      if(p&&p.count&&q.src.role==='solid')out.push({n:q.src,geo:yield* repairG(q.geo)});
       else q.geo.dispose();
     }
     yield;
